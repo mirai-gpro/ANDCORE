@@ -1,0 +1,191 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="ダッシュボード">
+  <div id="dashboard-loading" class="loading">読み込み中...</div>
+  <div id="dashboard-content" class="dashboard hidden">
+    <div class="welcome">
+      <h1>ようこそ、<span id="user-nickname"></span>さん</h1>
+      <p class="role-badge" id="user-role"></p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <p class="stat-label">ポイント残高</p>
+        <p class="stat-value" id="points-balance">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">保有チケット</p>
+        <p class="stat-value" id="ticket-count">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">撮影回数</p>
+        <p class="stat-value" id="photo-count">0</p>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <h2>クイックアクション</h2>
+      <div class="action-grid">
+        <a href="/events" class="action-card">
+          <h3>イベント一覧</h3>
+          <p>開催中のイベントを確認</p>
+        </a>
+        <a href="/camera" class="action-card">
+          <h3>カメラテスト</h3>
+          <p>撮影機能を試す</p>
+        </a>
+      </div>
+    </div>
+
+    <button id="logout-btn" class="btn btn-secondary">ログアウト</button>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../lib/supabase';
+
+  const loadingEl = document.getElementById('dashboard-loading')!;
+  const contentEl = document.getElementById('dashboard-content')!;
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
+    const nickname = user.user_metadata?.nickname || user.email?.split('@')[0] || 'ユーザー';
+    const role = user.user_metadata?.role || 'fan';
+
+    const roleLabels: Record<string, string> = {
+      fan: 'ファン',
+      idol: 'アイドル',
+      admin: '運営',
+    };
+
+    document.getElementById('user-nickname')!.textContent = nickname;
+    document.getElementById('user-role')!.textContent = roleLabels[role] || role;
+
+    loadingEl.classList.add('hidden');
+    contentEl.classList.remove('hidden');
+  }
+
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  });
+
+  init();
+</script>
+
+<style>
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .welcome {
+    margin-bottom: 2rem;
+  }
+
+  .welcome h1 {
+    font-size: 1.5rem;
+  }
+
+  .role-badge {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    background: var(--color-primary);
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .quick-actions h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .action-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s;
+    color: var(--color-text);
+  }
+
+  .action-card:hover {
+    border-color: var(--color-primary);
+    color: var(--color-text);
+  }
+
+  .action-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .action-card p {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .btn-secondary {
+    padding: 0.5rem 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--color-text);
+  }
+
+  .btn-secondary:hover {
+    border-color: #dc2626;
+    color: #dc2626;
+  }
+</style>

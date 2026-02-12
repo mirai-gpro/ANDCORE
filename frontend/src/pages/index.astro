@@ -1,0 +1,124 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="ホーム">
+  <section class="hero">
+    <h1>アンコール</h1>
+    <p class="subtitle">特典会をもっと特別な体験に</p>
+    <p class="description">
+      デジタルチケット、写真撮影、推し活ランキング。<br />
+      ファンとアイドルをつなぐ、新しい特典会のカタチ。
+    </p>
+    <div class="cta-group">
+      <a href="/auth/register" class="btn btn-primary">新規登録</a>
+      <a href="/events" class="btn btn-secondary">イベントを見る</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature-card">
+      <h3>デジタルチケット</h3>
+      <p>ポイントを使ってチケットを購入。QRコードでスムーズに入場。</p>
+    </div>
+    <div class="feature-card">
+      <h3>写真撮影</h3>
+      <p>ブラウザから直接撮影。高画質な思い出を自動でアルバムに保存。</p>
+    </div>
+    <div class="feature-card">
+      <h3>推し活ランキング</h3>
+      <p>あなたの推し活を可視化。ランクアップで特別な体験をアンロック。</p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .hero {
+    text-align: center;
+    padding: 3rem 0;
+  }
+
+  .hero h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--color-primary), #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    font-size: 1.2rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+  }
+
+  .description {
+    margin-top: 1rem;
+    color: var(--color-text-muted);
+    line-height: 1.8;
+  }
+
+  .cta-group {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.75rem 2rem;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-dark);
+    color: white;
+  }
+
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .feature-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+
+  .feature-card h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .feature-card p {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+</style>
