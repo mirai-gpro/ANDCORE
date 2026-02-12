@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build outputs
+frontend/dist/
+frontend/.astro/
+backend/*.egg-info/
+
+# Environment variables
+.env
+.env.local
+.env.production
+frontend/.env
+frontend/.env.local
+backend/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Vercel
+frontend/.vercel/
+
+# Python
+*.egg
+*.egg-info/
+dist/
+build/
+
+# GCP
+backend/credentials.json
