@@ -20,9 +20,9 @@ const { title } = Astro.props;
     <header class="header">
       <nav class="nav">
         <a href="/" class="logo">アンコール</a>
-        <div class="nav-links">
+        <div id="nav-links" class="nav-links">
           <a href="/events">イベント</a>
-          <a href="/auth/login">ログイン</a>
+          <a href="/auth/login" id="nav-auth">ログイン</a>
         </div>
       </nav>
     </header>
@@ -32,6 +32,41 @@ const { title } = Astro.props;
     <footer class="footer">
       <p>&copy; 2026 ANDCORE Inc. アンコール</p>
     </footer>
+    <script>
+      import { supabase } from '../lib/supabase';
+
+      async function updateNav() {
+        const navLinks = document.getElementById('nav-links');
+        const navAuth = document.getElementById('nav-auth');
+        if (!navLinks || !navAuth) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
+          const role = user.user_metadata?.role;
+          navAuth.textContent = 'マイページ';
+          navAuth.setAttribute('href', '/dashboard');
+
+          if (role === 'organizer') {
+            const link = document.createElement('a');
+            link.href = '/manage';
+            link.textContent = '運営管理';
+            navLinks.insertBefore(link, navAuth);
+          } else if (role === 'admin') {
+            const manageLink = document.createElement('a');
+            manageLink.href = '/manage';
+            manageLink.textContent = '運営管理';
+            const adminLink = document.createElement('a');
+            adminLink.href = '/admin';
+            adminLink.textContent = 'ANDCORE管理';
+            navLinks.insertBefore(manageLink, navAuth);
+            navLinks.insertBefore(adminLink, navAuth);
+          }
+        }
+      }
+
+      updateNav();
+    </script>
   </body>
 </html>
 
