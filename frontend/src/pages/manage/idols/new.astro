@@ -1,0 +1,568 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="グループ新規登録">
+  <div class="page">
+    <a href="/manage/idols" class="back-link">← アイドル管理に戻る</a>
+    <h1>グループ新規登録</h1>
+    <p class="subtitle">アイドルグループとメンバーを登録します</p>
+
+    <div id="auth-message" class="message hidden"></div>
+
+    <form id="group-form" class="form">
+      <!-- グループ情報 -->
+      <fieldset class="fieldset">
+        <legend>グループ情報</legend>
+        <div class="form-group">
+          <label for="group-name">グループ名 <span class="required">*</span></label>
+          <input type="text" id="group-name" required placeholder="例: StarLight" />
+        </div>
+        <div class="form-group">
+          <label for="catchphrase">キャッチコピー</label>
+          <input type="text" id="catchphrase" placeholder="例: 輝く星のように、あなたのそばに" />
+        </div>
+        <div class="form-group">
+          <label for="group-photo">グループ写真</label>
+          <input type="file" id="group-photo" accept="image/*" />
+          <div id="group-photo-preview" class="photo-preview hidden"></div>
+        </div>
+      </fieldset>
+
+      <!-- 管理者アカウント -->
+      <fieldset class="fieldset">
+        <legend>管理者 Googleアカウント</legend>
+        <p class="field-hint">グループを管理できるGoogleアカウントです。運営者アカウントはデフォルトで追加されます。</p>
+        <div id="admin-list" class="tag-list">
+          <span class="tag tag-default" id="default-admin">
+            <span id="default-admin-email">読み込み中...</span>
+            <span class="tag-label">デフォルト</span>
+          </span>
+        </div>
+        <div class="inline-add">
+          <input type="email" id="admin-email-input" placeholder="追加のGoogleアカウント" />
+          <button type="button" id="add-admin-btn" class="btn-secondary">追加</button>
+        </div>
+      </fieldset>
+
+      <!-- メンバー登録 -->
+      <fieldset class="fieldset">
+        <legend>メンバー登録</legend>
+        <div id="members-container"></div>
+        <button type="button" id="add-member-btn" class="btn-add-member">+ メンバーを追加</button>
+      </fieldset>
+
+      <button type="submit" class="btn-primary btn-submit">グループを登録</button>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../../lib/supabase';
+
+  const messageEl = document.getElementById('auth-message') as HTMLDivElement;
+  let currentUser: any = null;
+  let adminEmails: string[] = [];
+  let memberIndex = 0;
+
+  function showMessage(text: string, isError = false) {
+    messageEl.textContent = text;
+    messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
+    messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = '/auth/login'; return; }
+
+    const role = user.user_metadata?.role;
+    if (role !== 'organizer' && role !== 'admin') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    currentUser = user;
+    const email = user.email || '';
+    adminEmails = [email];
+    document.getElementById('default-admin-email')!.textContent = email;
+
+    // 初期メンバー1つ追加
+    addMemberRow();
+  }
+
+  // --- 管理者アカウント追加 ---
+  document.getElementById('add-admin-btn')!.addEventListener('click', () => {
+    const input = document.getElementById('admin-email-input') as HTMLInputElement;
+    const email = input.value.trim();
+    if (!email || !email.includes('@')) return;
+    if (adminEmails.includes(email)) return;
+
+    adminEmails.push(email);
+    const list = document.getElementById('admin-list')!;
+    const tag = document.createElement('span');
+    tag.className = 'tag tag-added';
+    tag.innerHTML = `${email} <button type="button" class="tag-remove" data-email="${email}">&times;</button>`;
+    list.appendChild(tag);
+    input.value = '';
+  });
+
+  document.getElementById('admin-list')!.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.tag-remove') as HTMLElement;
+    if (!btn) return;
+    const email = btn.dataset.email!;
+    adminEmails = adminEmails.filter(e => e !== email);
+    btn.parentElement!.remove();
+  });
+
+  // --- メンバー行追加 ---
+  function addMemberRow() {
+    const container = document.getElementById('members-container')!;
+    const idx = memberIndex++;
+    const row = document.createElement('div');
+    row.className = 'member-row';
+    row.dataset.idx = String(idx);
+    row.innerHTML = `
+      <div class="member-header">
+        <span class="member-number">メンバー ${idx + 1}</span>
+        <button type="button" class="btn-remove-member" data-idx="${idx}">&times; 削除</button>
+      </div>
+      <div class="member-fields">
+        <div class="form-group">
+          <label>アイドル名 <span class="required">*</span></label>
+          <input type="text" class="member-name" data-idx="${idx}" required placeholder="メンバーの芸名" />
+        </div>
+        <div class="form-group">
+          <label>Googleアカウント</label>
+          <input type="email" class="member-email" data-idx="${idx}" placeholder="member@gmail.com" />
+        </div>
+        <div class="form-group">
+          <label>メンバー写真</label>
+          <input type="file" class="member-photo" data-idx="${idx}" accept="image/*" />
+        </div>
+      </div>
+    `;
+    container.appendChild(row);
+  }
+
+  document.getElementById('add-member-btn')!.addEventListener('click', addMemberRow);
+
+  document.getElementById('members-container')!.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.btn-remove-member') as HTMLElement;
+    if (!btn) return;
+    btn.closest('.member-row')!.remove();
+  });
+
+  // --- グループ写真プレビュー ---
+  document.getElementById('group-photo')!.addEventListener('change', (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    const preview = document.getElementById('group-photo-preview')!;
+    if (file) {
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${url}" alt="プレビュー" />`;
+      preview.classList.remove('hidden');
+    } else {
+      preview.classList.add('hidden');
+    }
+  });
+
+  // --- 写真アップロードヘルパー ---
+  async function uploadPhoto(file: File, path: string): Promise<string | null> {
+    const { data, error } = await supabase.storage
+      .from('photos')
+      .upload(path, file, { upsert: true });
+
+    if (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('photos')
+      .getPublicUrl(data.path);
+
+    return urlData.publicUrl;
+  }
+
+  // --- フォーム送信 ---
+  const form = document.getElementById('group-form') as HTMLFormElement;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const groupName = (document.getElementById('group-name') as HTMLInputElement).value.trim();
+    const catchphrase = (document.getElementById('catchphrase') as HTMLInputElement).value.trim();
+
+    if (!groupName) {
+      showMessage('グループ名は必須です。', true);
+      return;
+    }
+
+    // メンバー情報収集
+    const memberRows = document.querySelectorAll('.member-row');
+    const members: { name: string; email: string; photoFile: File | null }[] = [];
+
+    for (const row of memberRows) {
+      const nameInput = row.querySelector('.member-name') as HTMLInputElement;
+      const emailInput = row.querySelector('.member-email') as HTMLInputElement;
+      const photoInput = row.querySelector('.member-photo') as HTMLInputElement;
+
+      const name = nameInput.value.trim();
+      if (!name) {
+        showMessage('全メンバーのアイドル名を入力してください。', true);
+        return;
+      }
+
+      members.push({
+        name,
+        email: emailInput.value.trim(),
+        photoFile: photoInput.files?.[0] || null,
+      });
+    }
+
+    showMessage('登録中...');
+    const submitBtn = form.querySelector('.btn-submit') as HTMLButtonElement;
+    submitBtn.disabled = true;
+
+    try {
+      // 1. グループ写真アップロード
+      let groupPhotoUrl: string | null = null;
+      const groupPhotoFile = (document.getElementById('group-photo') as HTMLInputElement).files?.[0];
+      if (groupPhotoFile) {
+        const path = `idol-groups/${currentUser.id}/${Date.now()}_group.${groupPhotoFile.name.split('.').pop()}`;
+        groupPhotoUrl = await uploadPhoto(groupPhotoFile, path);
+      }
+
+      // 2. グループ登録
+      const { data: group, error: groupError } = await supabase
+        .from('idol_groups')
+        .insert({
+          organizer_id: currentUser.id,
+          name: groupName,
+          catchphrase: catchphrase || null,
+          photo_url: groupPhotoUrl,
+        })
+        .select('id')
+        .single();
+
+      if (groupError) throw groupError;
+      const groupId = group.id;
+
+      // 3. 管理者アカウント登録
+      if (adminEmails.length > 0) {
+        const { error: adminError } = await supabase
+          .from('idol_group_admins')
+          .insert(adminEmails.map(email => ({ group_id: groupId, admin_email: email })));
+        if (adminError) throw adminError;
+      }
+
+      // 4. メンバー登録
+      for (let i = 0; i < members.length; i++) {
+        const m = members[i];
+
+        let memberPhotoUrl: string | null = null;
+        if (m.photoFile) {
+          const path = `idol-members/${groupId}/${Date.now()}_${i}.${m.photoFile.name.split('.').pop()}`;
+          memberPhotoUrl = await uploadPhoto(m.photoFile, path);
+        }
+
+        const { error: memberError } = await supabase
+          .from('idol_members')
+          .insert({
+            group_id: groupId,
+            name: m.name,
+            google_email: m.email || null,
+            photo_url: memberPhotoUrl,
+            sort_order: i,
+          });
+
+        if (memberError) throw memberError;
+      }
+
+      showMessage('グループを登録しました。リダイレクト中...');
+      setTimeout(() => {
+        window.location.href = `/manage/idols/${groupId}`;
+      }, 800);
+
+    } catch (err: any) {
+      showMessage('エラーが発生しました: ' + (err.message || err), true);
+      submitBtn.disabled = false;
+    }
+  });
+
+  init();
+</script>
+
+<style>
+  .page {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+
+  .back-link:hover { color: var(--color-primary); }
+
+  h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  /* Form */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    background: var(--color-surface);
+    box-shadow: var(--shadow);
+  }
+
+  .fieldset legend {
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 0 0.5rem;
+  }
+
+  .field-hint {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 1rem;
+  }
+
+  .form-group:last-child { margin-bottom: 0; }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .required { color: #ef4444; }
+
+  .form-group input[type="text"],
+  .form-group input[type="email"] {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus {
+    border-color: var(--color-primary);
+  }
+
+  .form-group input[type="file"] {
+    font-size: 0.85rem;
+  }
+
+  .photo-preview img {
+    max-width: 200px;
+    max-height: 150px;
+    border-radius: var(--radius);
+    margin-top: 0.5rem;
+    object-fit: cover;
+  }
+
+  /* Tag list (admin emails) */
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+  }
+
+  .tag-default {
+    background: #eef2ff;
+    color: #6366f1;
+    border: 1px solid #c7d2fe;
+  }
+
+  .tag-label {
+    font-size: 0.65rem;
+    background: #6366f1;
+    color: white;
+    padding: 0.1rem 0.35rem;
+    border-radius: 9999px;
+  }
+
+  .tag-added {
+    background: #f3f4f6;
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .tag-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--color-text-muted);
+    padding: 0;
+  }
+
+  .tag-remove:hover { color: #ef4444; }
+
+  .inline-add {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .inline-add input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    outline: none;
+  }
+
+  .inline-add input:focus { border-color: var(--color-primary); }
+
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-primary);
+    background: transparent;
+    color: var(--color-primary);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-secondary:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  /* Members */
+  .member-row {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: #fafafa;
+  }
+
+  .member-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .member-number {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .btn-remove-member {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .btn-remove-member:hover { text-decoration: underline; }
+
+  .member-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .member-fields .form-group:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .btn-add-member {
+    width: 100%;
+    padding: 0.75rem;
+    background: transparent;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+
+  .btn-add-member:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .btn-submit {
+    width: 100%;
+    padding: 0.875rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-submit:hover { background: var(--color-primary-dark); }
+  .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .btn-primary { background: var(--color-primary); color: white; }
+
+  .message {
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .message-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+  .message-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .hidden { display: none; }
+
+  @media (max-width: 600px) {
+    .member-fields {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
