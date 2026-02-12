@@ -57,7 +57,7 @@ import Layout from '../layouts/Layout.astro';
       return;
     }
 
-    const nickname = user.user_metadata?.nickname || user.email?.split('@')[0] || 'ユーザー';
+    const nickname = user.user_metadata?.nickname || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー';
     const role = user.user_metadata?.role || 'fan';
 
     const roleLabels: Record<string, string> = {
