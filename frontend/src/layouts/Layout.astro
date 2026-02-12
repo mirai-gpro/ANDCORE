@@ -47,7 +47,12 @@ const { title } = Astro.props;
           navAuth.textContent = 'マイページ';
           navAuth.setAttribute('href', '/dashboard');
 
-          if (role === 'organizer') {
+          if (role === 'idol') {
+            const link = document.createElement('a');
+            link.href = '/idol';
+            link.textContent = 'ポータル';
+            navLinks.insertBefore(link, navAuth);
+          } else if (role === 'organizer') {
             const link = document.createElement('a');
             link.href = '/manage';
             link.textContent = '運営管理';

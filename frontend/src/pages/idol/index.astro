@@ -1,0 +1,396 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="アイドルポータル">
+  <div id="idol-loading" class="loading">読み込み中...</div>
+  <div id="idol-content" class="portal hidden">
+
+    <div class="page-header">
+      <div class="header-row">
+        <div>
+          <h1 id="idol-name">マイポータル</h1>
+          <p class="subtitle">ファンコミュニティの管理</p>
+        </div>
+        <span class="badge-idol">IDOL</span>
+      </div>
+    </div>
+
+    <!-- 概要統計 -->
+    <div class="stats-grid">
+      <div class="stat-card accent">
+        <p class="stat-label">推し登録ファン数</p>
+        <p class="stat-value" id="follower-count">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">今月の撮影回数</p>
+        <p class="stat-value" id="photo-count">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">未読メッセージ</p>
+        <p class="stat-value" id="unread-count">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">次回イベント</p>
+        <p class="stat-value stat-text" id="next-event">-</p>
+      </div>
+    </div>
+
+    <!-- ファンランキング -->
+    <section class="section">
+      <div class="section-header">
+        <h2>ファンランキング</h2>
+        <span class="section-hint">エンゲージメントスコア順</span>
+      </div>
+      <div class="ranking-list" id="ranking-list">
+        <p class="empty-state">データを取得中...</p>
+      </div>
+    </section>
+
+    <!-- メニュー -->
+    <section class="section">
+      <h2>コミュニティ管理</h2>
+      <div class="menu-grid">
+        <a href="/idol/announcements" class="menu-card">
+          <div class="menu-icon">📢</div>
+          <h3>お知らせ投稿</h3>
+          <p>ファンへの告知・近況報告を投稿</p>
+        </a>
+        <a href="/idol/messages" class="menu-card">
+          <div class="menu-icon">💬</div>
+          <h3>メッセージ</h3>
+          <p>ファンとの1:1コミュニケーション</p>
+        </a>
+        <a href="/idol/fans" class="menu-card">
+          <div class="menu-icon">👥</div>
+          <h3>ファン一覧</h3>
+          <p>推し登録ファンの確認・動向分析</p>
+        </a>
+        <a href="/idol/media" class="menu-card">
+          <div class="menu-icon">📸</div>
+          <h3>撮影ギャラリー</h3>
+          <p>過去の撮影データを閲覧・管理</p>
+        </a>
+      </div>
+    </section>
+
+    <!-- 最近のファン動向 -->
+    <section class="section">
+      <h2>最近のファン動向</h2>
+      <div class="activity-feed" id="activity-feed">
+        <p class="empty-state">まだアクティビティがありません</p>
+      </div>
+    </section>
+
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
+    const role = user.user_metadata?.role;
+    if (role !== 'idol' && role !== 'admin') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    const idolName = user.user_metadata?.nickname || user.user_metadata?.full_name || 'マイポータル';
+    document.getElementById('idol-name')!.textContent = `${idolName}のポータル`;
+
+    // 統計を並行取得
+    const [followersRes, photosRes, unreadRes, nextEventRes] = await Promise.all([
+      supabase
+        .from('fan_follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('idol_id', user.id),
+      supabase
+        .from('media_assets')
+        .select('*', { count: 'exact', head: true })
+        .eq('idol_id', user.id),
+      supabase
+        .from('fan_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .is('read_at', null),
+      supabase
+        .from('ticket_products')
+        .select('events(title, event_date)')
+        .eq('idol_id', user.id)
+        .gt('events.event_date', new Date().toISOString())
+        .order('created_at', { ascending: true })
+        .limit(1),
+    ]);
+
+    document.getElementById('follower-count')!.textContent = String(followersRes.count ?? 0);
+    document.getElementById('photo-count')!.textContent = String(photosRes.count ?? 0);
+    document.getElementById('unread-count')!.textContent = String(unreadRes.count ?? 0);
+
+    if (nextEventRes.data && nextEventRes.data.length > 0) {
+      const event = (nextEventRes.data[0] as any).events;
+      if (event) {
+        const date = new Date(event.event_date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+        document.getElementById('next-event')!.textContent = `${date} ${event.title}`;
+      }
+    }
+
+    // ファンランキング取得
+    const { data: rankings } = await supabase
+      .from('fan_engagement')
+      .select('fan_id, engagement_score, total_points_spent, event_count, photo_count')
+      .eq('idol_id', user.id)
+      .order('engagement_score', { ascending: false })
+      .limit(10);
+
+    const rankingList = document.getElementById('ranking-list')!;
+
+    if (rankings && rankings.length > 0) {
+      // ファンのプロフィールを取得
+      const fanIds = rankings.map(r => r.fan_id);
+      const { data: fans } = await supabase
+        .from('profiles')
+        .select('id, nickname, avatar_url')
+        .in('id', fanIds);
+
+      const fanMap = new Map((fans ?? []).map(f => [f.id, f]));
+
+      rankingList.innerHTML = rankings.map((r, i) => {
+        const fan = fanMap.get(r.fan_id);
+        const name = fan?.nickname ?? '匿名ファン';
+        const rankIcon = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+        return `
+          <div class="ranking-item">
+            <span class="rank">${rankIcon}</span>
+            <div class="ranking-info">
+              <span class="fan-name">${name}</span>
+              <span class="fan-stats">${r.event_count}回参加 / ${r.photo_count}枚撮影</span>
+            </div>
+            <span class="score">${r.engagement_score} pt</span>
+          </div>
+        `;
+      }).join('');
+    } else {
+      rankingList.innerHTML = '<p class="empty-state">まだランキングデータがありません</p>';
+    }
+
+    document.getElementById('idol-loading')!.classList.add('hidden');
+    document.getElementById('idol-content')!.classList.remove('hidden');
+  }
+
+  init();
+</script>
+
+<style>
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .hidden { display: none; }
+
+  .page-header { margin-bottom: 2rem; }
+
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .page-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .badge-idol {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: linear-gradient(135deg, #ec4899, #a855f7);
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  /* Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .stat-card.accent {
+    border-color: #ec4899;
+    background: linear-gradient(135deg, #fdf2f8, #faf5ff);
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .stat-text {
+    font-size: 0.9rem;
+  }
+
+  /* Sections */
+  .section {
+    margin-bottom: 2rem;
+  }
+
+  .section h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-header h2 {
+    margin-bottom: 0;
+  }
+
+  .section-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  /* Ranking */
+  .ranking-list {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .ranking-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .ranking-item:last-child {
+    border-bottom: none;
+  }
+
+  .rank {
+    font-size: 1.1rem;
+    font-weight: 700;
+    min-width: 2rem;
+    text-align: center;
+  }
+
+  .ranking-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .fan-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .fan-stats {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .score {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  /* Menu */
+  .menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .menu-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .menu-card:hover {
+    border-color: #ec4899;
+    box-shadow: 0 2px 8px rgba(236, 72, 153, 0.15);
+    color: var(--color-text);
+  }
+
+  .menu-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .menu-card h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .menu-card p {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+
+  /* Activity */
+  .activity-feed {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    padding: 1rem;
+  }
+</style>
