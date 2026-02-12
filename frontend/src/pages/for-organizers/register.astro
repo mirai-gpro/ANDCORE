@@ -1,5 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+
+const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
 ---
 
 <Layout title="運営者様 新規登録">
@@ -12,6 +14,33 @@ import Layout from '../../layouts/Layout.astro';
       <p class="auth-subtitle">運営者アカウントを作成してアンコールを始めましょう</p>
 
       <div id="auth-message" class="message hidden"></div>
+
+      <!-- Google Sign Up Button -->
+      <div id="g_id_onload"
+        data-client_id={googleClientId}
+        data-context="signup"
+        data-ux_mode="popup"
+        data-callback="handleGoogleCredential"
+        data-auto_prompt="false"
+        data-itp_support="true">
+      </div>
+      <div class="google-btn-wrapper">
+        <div class="g_id_signin"
+          data-type="standard"
+          data-shape="rectangular"
+          data-theme="outline"
+          data-text="signup_with"
+          data-size="large"
+          data-logo_alignment="left"
+          data-width="100%"
+          data-locale="ja">
+        </div>
+      </div>
+      <p class="google-hint">Googleで登録後、次の画面で団体情報を入力いただきます</p>
+
+      <div class="divider">
+        <span>またはメールで登録</span>
+      </div>
 
       <form id="register-form" class="auth-form">
         <div class="form-group">
@@ -66,6 +95,35 @@ import Layout from '../../layouts/Layout.astro';
     messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
   }
 
+  // Google Sign Up callback (register as organizer)
+  (window as any).handleGoogleCredential = async (response: { credential: string }) => {
+    showMessage('Googleアカウントで登録中...');
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: response.credential,
+    });
+
+    if (error) {
+      showMessage('Google認証に失敗しました: ' + error.message, true);
+      return;
+    }
+
+    // ロールを organizer に設定
+    const { error: updateError } = await supabase.auth.updateUser({
+      data: { role: 'organizer' },
+    });
+
+    if (updateError) {
+      showMessage('ロール設定に失敗しました: ' + updateError.message, true);
+      return;
+    }
+
+    showMessage('登録が完了しました。リダイレクト中...');
+    window.location.href = '/manage';
+  };
+
+  // Email/Password registration
   const form = document.getElementById('register-form') as HTMLFormElement;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -148,6 +206,36 @@ import Layout from '../../layouts/Layout.astro';
     background: #ecfdf5;
     color: #10b981;
     border: 1px solid #a7f3d0;
+  }
+
+  .google-btn-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .google-hint {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1rem 0;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
   }
 
   .auth-card h1 {

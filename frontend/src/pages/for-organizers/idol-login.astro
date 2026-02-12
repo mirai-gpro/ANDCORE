@@ -1,5 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+
+const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
 ---
 
 <Layout title="アイドルメンバー・ログイン">
@@ -12,6 +14,32 @@ import Layout from '../../layouts/Layout.astro';
       <p class="auth-subtitle">運営者様から共有されたアカウントでログインしてください</p>
 
       <div id="auth-message" class="message hidden"></div>
+
+      <!-- Google One Tap / Sign In Button -->
+      <div id="g_id_onload"
+        data-client_id={googleClientId}
+        data-context="signin"
+        data-ux_mode="popup"
+        data-callback="handleGoogleCredential"
+        data-auto_prompt="true"
+        data-itp_support="true">
+      </div>
+      <div class="google-btn-wrapper">
+        <div class="g_id_signin"
+          data-type="standard"
+          data-shape="rectangular"
+          data-theme="outline"
+          data-text="signin_with"
+          data-size="large"
+          data-logo_alignment="left"
+          data-width="100%"
+          data-locale="ja">
+        </div>
+      </div>
+
+      <div class="divider">
+        <span>またはメールでログイン</span>
+      </div>
 
       <form id="login-form" class="auth-form">
         <div class="form-group">
@@ -47,6 +75,41 @@ import Layout from '../../layouts/Layout.astro';
     messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
   }
 
+  // ロール検証ヘルパー
+  async function verifyIdolRole() {
+    const { data: { user } } = await supabase.auth.getUser();
+    const role = user?.user_metadata?.role;
+    if (role !== 'idol') {
+      await supabase.auth.signOut();
+      if (role === 'organizer' || role === 'admin') {
+        showMessage('このアカウントは運営者アカウントです。運営者ログインをご利用ください。', true);
+      } else {
+        showMessage('このアカウントはアイドルメンバーとして登録されていません。運営者様にお問い合わせください。', true);
+      }
+      return;
+    }
+    showMessage('ログインしました。リダイレクト中...');
+    window.location.href = '/idol';
+  }
+
+  // Google One Tap callback
+  (window as any).handleGoogleCredential = async (response: { credential: string }) => {
+    showMessage('Googleアカウントで認証中...');
+
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: response.credential,
+    });
+
+    if (error) {
+      showMessage('Google認証に失敗しました: ' + error.message, true);
+      return;
+    }
+
+    await verifyIdolRole();
+  };
+
+  // Email/Password login
   const form = document.getElementById('login-form') as HTMLFormElement;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -60,19 +123,7 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
-    const role = data.user?.user_metadata?.role;
-    if (role !== 'idol') {
-      await supabase.auth.signOut();
-      if (role === 'organizer' || role === 'admin') {
-        showMessage('このアカウントは運営者アカウントです。運営者ログインをご利用ください。', true);
-      } else {
-        showMessage('このアカウントはアイドルメンバーアカウントではありません。', true);
-      }
-      return;
-    }
-
-    showMessage('ログインしました。リダイレクト中...');
-    window.location.href = '/idol';
+    await verifyIdolRole();
   });
 </script>
 
@@ -118,6 +169,29 @@ import Layout from '../../layouts/Layout.astro';
     background: linear-gradient(135deg, #fdf2f8, #faf5ff);
     color: #ec4899;
     border: 1px solid #f9a8d4;
+  }
+
+  .google-btn-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1rem 0;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
   }
 
   .auth-card h1 {
