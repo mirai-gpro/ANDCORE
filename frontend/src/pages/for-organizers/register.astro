@@ -1,0 +1,261 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="運営者様 新規登録">
+  <div class="auth-container">
+    <div class="auth-card">
+      <a href="/for-organizers" class="back-link">← 運営者様ページに戻る</a>
+
+      <div class="card-badge register-badge">NEW ACCOUNT</div>
+      <h1>運営者様 新規登録</h1>
+      <p class="auth-subtitle">運営者アカウントを作成してアンコールを始めましょう</p>
+
+      <div id="auth-message" class="message hidden"></div>
+
+      <form id="register-form" class="auth-form">
+        <div class="form-group">
+          <label for="org-name">団体名 / 事務所名</label>
+          <input type="text" id="org-name" name="org_name" required placeholder="例: ABC Entertainment" />
+        </div>
+        <div class="form-group">
+          <label for="representative">ご担当者名</label>
+          <input type="text" id="representative" name="representative" required placeholder="氏名を入力" />
+        </div>
+        <div class="form-group">
+          <label for="email">メールアドレス</label>
+          <input type="email" id="email" name="email" required placeholder="organizer@example.com" />
+        </div>
+        <div class="form-group">
+          <label for="phone">電話番号</label>
+          <input type="tel" id="phone" name="phone" placeholder="090-1234-5678（任意）" />
+        </div>
+        <div class="form-group">
+          <label for="password">パスワード</label>
+          <input type="password" id="password" name="password" required minlength="8" placeholder="8文字以上のパスワード" />
+        </div>
+        <div class="form-group">
+          <label for="password-confirm">パスワード（確認）</label>
+          <input type="password" id="password-confirm" name="password_confirm" required minlength="8" placeholder="もう一度入力してください" />
+        </div>
+
+        <div class="terms">
+          <label>
+            <input type="checkbox" id="agree-terms" required />
+            <span><a href="/terms" target="_blank">利用規約</a>に同意する</span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full">アカウントを作成</button>
+      </form>
+
+      <div class="auth-links">
+        <p>すでにアカウントをお持ちの方は <a href="/for-organizers/login">ログイン</a></p>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  const messageEl = document.getElementById('auth-message') as HTMLDivElement;
+
+  function showMessage(text: string, isError = false) {
+    messageEl.textContent = text;
+    messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
+  }
+
+  const form = document.getElementById('register-form') as HTMLFormElement;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const orgName = (document.getElementById('org-name') as HTMLInputElement).value;
+    const representative = (document.getElementById('representative') as HTMLInputElement).value;
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const phone = (document.getElementById('phone') as HTMLInputElement).value;
+    const password = (document.getElementById('password') as HTMLInputElement).value;
+    const passwordConfirm = (document.getElementById('password-confirm') as HTMLInputElement).value;
+
+    if (password !== passwordConfirm) {
+      showMessage('パスワードが一致しません。', true);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          nickname: representative,
+          organization_name: orgName,
+          phone,
+          role: 'organizer',
+        },
+      },
+    });
+
+    if (error) {
+      showMessage(error.message, true);
+      return;
+    }
+
+    if (data.user) {
+      showMessage('登録が完了しました。メールを確認後、ログインしてください。');
+    }
+  });
+</script>
+
+<style>
+  .auth-container {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 0;
+  }
+
+  .auth-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: var(--shadow);
+  }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 1.25rem;
+  }
+
+  .back-link:hover {
+    color: var(--color-primary);
+  }
+
+  .card-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+
+  .register-badge {
+    background: #ecfdf5;
+    color: #10b981;
+    border: 1px solid #a7f3d0;
+  }
+
+  .auth-card h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .auth-subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .form-group input {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus {
+    border-color: var(--color-primary);
+  }
+
+  .terms {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .terms label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+
+  .terms input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--color-primary);
+  }
+
+  .btn-full {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-dark);
+  }
+
+  .auth-links {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .message {
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .message-error {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+
+  .message-success {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+  }
+
+  .hidden {
+    display: none;
+  }
+</style>

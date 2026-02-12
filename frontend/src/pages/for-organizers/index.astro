@@ -1,0 +1,207 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="運営者様ページ">
+  <div class="portal">
+
+    <div class="portal-header">
+      <h1>運営者様・アイドルメンバー様</h1>
+      <p class="portal-lead">
+        アンコールをご利用いただく運営者様・アイドルメンバー様向けのページです。<br />
+        ログインまたは新規登録からお進みください。
+      </p>
+    </div>
+
+    <div class="card-grid">
+
+      <!-- 運営者ログイン -->
+      <a href="/for-organizers/login" class="portal-card organizer">
+        <div class="card-icon">🏢</div>
+        <h2>運営者ログイン</h2>
+        <p>すでにアカウントをお持ちの運営者様はこちらからログインしてください。</p>
+        <span class="card-action">ログインする →</span>
+      </a>
+
+      <!-- 運営者新規登録 -->
+      <a href="/for-organizers/register" class="portal-card organizer-new">
+        <div class="card-icon">📝</div>
+        <h2>運営者様 新規登録</h2>
+        <p>初めてご利用の運営者様はこちらからアカウントを作成してください。</p>
+        <span class="card-action">新規登録する →</span>
+      </a>
+
+      <!-- アイドルメンバーログイン -->
+      <a href="/for-organizers/idol-login" class="portal-card idol">
+        <div class="card-icon">⭐</div>
+        <h2>アイドルメンバー・ログイン</h2>
+        <p>所属アイドルメンバーの方はこちらからログインしてください。</p>
+        <span class="card-action">ログインする →</span>
+      </a>
+
+    </div>
+
+    <div class="portal-info">
+      <h3>アンコールで出来ること</h3>
+      <div class="feature-grid">
+        <div class="feature">
+          <strong>イベント管理</strong>
+          <p>特典会の作成・チケット販売・入場管理をワンストップで。</p>
+        </div>
+        <div class="feature">
+          <strong>ファンコミュニティ</strong>
+          <p>推しファンのランキング・動向把握でコミュニティを活性化。</p>
+        </div>
+        <div class="feature">
+          <strong>撮影・メディア管理</strong>
+          <p>AI顔認識で撮影データを自動整理。ファンへの即時配信。</p>
+        </div>
+        <div class="feature">
+          <strong>売上レポート</strong>
+          <p>リアルタイムの売上分析・チケット動向の可視化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="portal-footer">
+      <p>ファンの方はこちら → <a href="/auth/login">ファン向けログイン</a></p>
+    </div>
+
+  </div>
+</Layout>
+
+<style>
+  .portal {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .portal-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .portal-header h1 {
+    font-size: 1.6rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .portal-lead {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.7;
+  }
+
+  /* Card Grid */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .portal-card {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.75rem 1.5rem;
+    text-decoration: none;
+    color: var(--color-text);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .portal-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    color: var(--color-text);
+  }
+
+  .portal-card.organizer:hover {
+    border-color: #6366f1;
+  }
+
+  .portal-card.organizer-new:hover {
+    border-color: #10b981;
+  }
+
+  .portal-card.idol:hover {
+    border-color: #ec4899;
+  }
+
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .portal-card h2 {
+    font-size: 1.05rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .portal-card p {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  .card-action {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .portal-card.organizer-new .card-action {
+    color: #10b981;
+  }
+
+  .portal-card.idol .card-action {
+    color: #ec4899;
+  }
+
+  /* Info */
+  .portal-info {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+  }
+
+  .portal-info h3 {
+    font-size: 1rem;
+    margin-bottom: 1.25rem;
+    text-align: center;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .feature strong {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .feature p {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+
+  /* Footer */
+  .portal-footer {
+    text-align: center;
+    padding: 1.5rem 0;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+</style>
