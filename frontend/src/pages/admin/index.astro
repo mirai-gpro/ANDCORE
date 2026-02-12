@@ -1,0 +1,223 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="ANDCORE管理">
+  <div id="admin-loading" class="loading">読み込み中...</div>
+  <div id="admin-content" class="admin hidden">
+    <div class="page-header">
+      <div class="header-row">
+        <div>
+          <h1>ANDCORE プラットフォーム管理</h1>
+          <p class="subtitle">サービス全体の管理・モニタリング</p>
+        </div>
+        <span class="badge-admin">ADMIN</span>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <p class="stat-label">総ユーザー数</p>
+        <p class="stat-value" id="total-users">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">運営者アカウント</p>
+        <p class="stat-value" id="organizer-count">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">総イベント数</p>
+        <p class="stat-value" id="total-events">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">アクティブイベント</p>
+        <p class="stat-value" id="active-events">0</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>プラットフォーム管理</h2>
+      <div class="menu-grid">
+        <a href="/admin/organizers" class="menu-card">
+          <div class="menu-icon">🏢</div>
+          <h3>運営者管理</h3>
+          <p>運営者アカウントの発行・停止・権限管理</p>
+        </a>
+        <a href="/admin/users" class="menu-card">
+          <div class="menu-icon">👥</div>
+          <h3>ユーザー管理</h3>
+          <p>全ユーザーの一覧・ロール変更・アカウント操作</p>
+        </a>
+        <a href="/admin/events" class="menu-card">
+          <div class="menu-icon">📅</div>
+          <h3>イベント監視</h3>
+          <p>全イベントの状況確認・強制停止</p>
+        </a>
+        <a href="/admin/reports" class="menu-card">
+          <div class="menu-icon">📊</div>
+          <h3>売上レポート</h3>
+          <p>プラットフォーム全体の売上・KPI</p>
+        </a>
+        <a href="/admin/settings" class="menu-card">
+          <div class="menu-icon">⚙️</div>
+          <h3>システム設定</h3>
+          <p>ポイントレート・手数料・利用規約</p>
+        </a>
+        <a href="/admin/audit" class="menu-card">
+          <div class="menu-icon">📋</div>
+          <h3>監査ログ</h3>
+          <p>管理操作の履歴・セキュリティログ</p>
+        </a>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
+    const role = user.user_metadata?.role;
+    if (role !== 'admin') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    // 統計情報を取得
+    const [usersRes, organizersRes, eventsRes, activeEventsRes] = await Promise.all([
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'organizer'),
+      supabase.from('events').select('*', { count: 'exact', head: true }),
+      supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    ]);
+
+    document.getElementById('total-users')!.textContent = String(usersRes.count ?? 0);
+    document.getElementById('organizer-count')!.textContent = String(organizersRes.count ?? 0);
+    document.getElementById('total-events')!.textContent = String(eventsRes.count ?? 0);
+    document.getElementById('active-events')!.textContent = String(activeEventsRes.count ?? 0);
+
+    document.getElementById('admin-loading')!.classList.add('hidden');
+    document.getElementById('admin-content')!.classList.remove('hidden');
+  }
+
+  init();
+</script>
+
+<style>
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .page-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .badge-admin {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #dc2626;
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .section h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+
+  .menu-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .menu-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+    color: var(--color-text);
+  }
+
+  .menu-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .menu-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.375rem;
+  }
+
+  .menu-card p {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+</style>
