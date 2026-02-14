@@ -38,12 +38,15 @@ import Layout from '../../../layouts/Layout.astro';
         <legend>会場</legend>
         <div class="form-group">
           <label for="venue-name">会場名</label>
-          <input type="text" id="venue-name" />
+          <div class="venue-name-row">
+            <input type="text" id="venue-name" />
+            <button type="button" id="open-map-btn" class="btn-map">GoogleMapで検索</button>
+          </div>
         </div>
         <div class="form-group">
           <label for="venue-map-url">GoogleMap リンク</label>
-          <input type="url" id="venue-map-url" />
-          <p class="field-hint">GoogleMapで会場を開き「共有」ボタンからリンクをコピーしてください。</p>
+          <input type="url" id="venue-map-url" placeholder="上のボタンで検索 → 共有 → URLを貼り付け" />
+          <p class="field-hint">GoogleMapで会場の「共有」ボタンからリンクをコピーして貼り付けてください。</p>
         </div>
       </fieldset>
 
@@ -185,6 +188,17 @@ import Layout from '../../../layouts/Layout.astro';
     if (addSlot) { addSlotRow(Number(addSlot.dataset.idx)); return; }
     const removeSlot = target.closest('.btn-remove-slot') as HTMLElement;
     if (removeSlot) { removeSlot.closest('.slot-row')!.remove(); return; }
+  });
+
+  // GoogleMapで検索ボタン
+  document.getElementById('open-map-btn')!.addEventListener('click', () => {
+    const venueName = (document.getElementById('venue-name') as HTMLInputElement).value.trim();
+    if (!venueName) {
+      alert('会場名を入力してからボタンを押してください。');
+      return;
+    }
+    const url = `https://www.google.com/maps/search/${encodeURIComponent(venueName)}`;
+    window.open(url, '_blank', 'width=800,height=600');
   });
 
   const isFreeCheckbox = document.getElementById('is-free') as HTMLInputElement;
@@ -505,6 +519,32 @@ import Layout from '../../../layouts/Layout.astro';
     font-size: 0.8rem;
     color: var(--color-text-muted);
     margin-bottom: 0.25rem;
+  }
+
+  .venue-name-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .venue-name-row input { flex: 1; }
+
+  .btn-map {
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #059669;
+    background: transparent;
+    color: #059669;
+    border-radius: var(--radius);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .btn-map:hover {
+    background: #059669;
+    color: white;
   }
 
   .checkbox-label {
