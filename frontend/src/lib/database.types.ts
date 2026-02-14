@@ -123,6 +123,23 @@ export interface Database {
           door_time?: string;
         };
       };
+      event_performers: {
+        Row: {
+          id: string;
+          event_id: string;
+          idol_group_id: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          event_id: string;
+          idol_group_id: string;
+          sort_order?: number;
+        };
+        Update: {
+          sort_order?: number;
+        };
+      };
       ticket_products: {
         Row: {
           id: string;

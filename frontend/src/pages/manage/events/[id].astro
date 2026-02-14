@@ -24,8 +24,13 @@ import Layout from '../../../layouts/Layout.astro';
           <input type="text" id="event-subtitle" />
         </div>
         <div class="form-group">
-          <label for="event-performers">出演者 <span class="required">*</span></label>
-          <input type="text" id="event-performers" required />
+          <label>出演者 <span class="required">*</span></label>
+          <div id="idol-groups-list" class="idol-groups-list">
+            <p class="field-hint">読み込み中...</p>
+          </div>
+          <label for="event-performers-free">その他の出演者（フリー入力）</label>
+          <input type="text" id="event-performers-free" />
+          <p class="field-hint">登録済グループ以外の出演者がいる場合に入力してください。</p>
         </div>
         <div class="form-group">
           <label for="event-description">イベント内容</label>
@@ -117,11 +122,37 @@ import Layout from '../../../layouts/Layout.astro';
   let currentUser: any = null;
   let eventId = '';
   let dateIndex = 0;
+  let idolGroups: { id: string; name: string; photo_url: string | null }[] = [];
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
 
   // URLからイベントIDを取得
   const pathParts = window.location.pathname.split('/');
   eventId = pathParts[pathParts.length - 1];
+
+  // --- アイドルグループ一覧の描画 ---
+  async function loadIdolGroups(userId: string, checkedIds: string[] = []) {
+    const { data } = await supabase
+      .from('idol_groups')
+      .select('id, name, photo_url')
+      .eq('organizer_id', userId)
+      .order('name');
+
+    idolGroups = data || [];
+    const container = document.getElementById('idol-groups-list')!;
+
+    if (idolGroups.length === 0) {
+      container.innerHTML = `<p class="field-hint">登録済のアイドルグループがありません。<a href="/manage/idols/new">グループを登録</a>してください。</p>`;
+      return;
+    }
+
+    container.innerHTML = idolGroups.map(g => `
+      <label class="idol-check-item">
+        <input type="checkbox" name="idol-group" value="${g.id}" ${checkedIds.includes(g.id) ? 'checked' : ''} />
+        ${g.photo_url ? `<img src="${g.photo_url}" alt="" class="idol-check-photo" />` : '<span class="idol-check-photo idol-check-photo-empty"></span>'}
+        <span class="idol-check-name">${g.name}</span>
+      </label>
+    `).join('');
+  }
 
   function showMessage(text: string, isError = false) {
     messageEl.textContent = text;
@@ -239,11 +270,16 @@ import Layout from '../../../layouts/Layout.astro';
 
     const title = (document.getElementById('event-title') as HTMLInputElement).value.trim();
     const subtitle = (document.getElementById('event-subtitle') as HTMLInputElement).value.trim();
-    const performers = (document.getElementById('event-performers') as HTMLInputElement).value.trim();
+    const performersFree = (document.getElementById('event-performers-free') as HTMLInputElement).value.trim();
     const description = (document.getElementById('event-description') as HTMLTextAreaElement).value.trim();
     const isFree = isFreeCheckbox.checked;
     const priceVal = (document.getElementById('ticket-price') as HTMLInputElement).value;
     const ticketPrice = isFree ? null : (priceVal ? parseInt(priceVal, 10) : null);
+
+    // 選択されたアイドルグループID
+    const selectedGroupIds = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[name="idol-group"]:checked')
+    ).map(el => el.value);
 
     const venueName = (document.getElementById('venue-name') as HTMLInputElement).value.trim();
     const venueMapUrl = (document.getElementById('venue-map-url') as HTMLInputElement).value.trim();
@@ -253,7 +289,10 @@ import Layout from '../../../layouts/Layout.astro';
     const tiktokUrl = (document.getElementById('tiktok-url') as HTMLInputElement).value.trim();
 
     if (!title) { showMessage('イベント名は必須です。', true); return; }
-    if (!performers) { showMessage('出演者は必須です。', true); return; }
+    if (selectedGroupIds.length === 0 && !performersFree) {
+      showMessage('出演者を1組以上選択するか、フリー入力してください。', true);
+      return;
+    }
 
     // 日程の収集
     const dateRows = document.querySelectorAll('.date-row');
@@ -288,11 +327,15 @@ import Layout from '../../../layouts/Layout.astro';
         imageUrl = (await uploadImage(imageFile, path)) || undefined;
       }
 
+      // performers フィールド: 選択グループ名 + フリー入力を結合して保存（表示用）
+      const selectedNames = idolGroups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name);
+      const allPerformers = [...selectedNames, ...(performersFree ? [performersFree] : [])].join(' / ');
+
       // イベント更新
       const updateData: any = {
         title,
         subtitle: subtitle || null,
-        performers: performers || null,
+        performers: allPerformers || null,
         venue_name: venueName || null,
         venue_map_url: venueMapUrl || null,
         description: description || null,
@@ -310,6 +353,18 @@ import Layout from '../../../layouts/Layout.astro';
         .eq('id', eventId);
 
       if (updateError) throw updateError;
+
+      // 既存の出演者を削除して再登録
+      await supabase.from('event_performers').delete().eq('event_id', eventId);
+      if (selectedGroupIds.length > 0) {
+        const rows = selectedGroupIds.map((gid, i) => ({
+          event_id: eventId,
+          idol_group_id: gid,
+          sort_order: i,
+        }));
+        const { error: perfError } = await supabase.from('event_performers').insert(rows);
+        if (perfError) throw perfError;
+      }
 
       // 既存の日程を削除して再登録（cascadeで時間帯も消える）
       await supabase.from('event_dates').delete().eq('event_id', eventId);
@@ -376,10 +431,25 @@ import Layout from '../../../layouts/Layout.astro';
       return;
     }
 
+    // 出演アイドルグループを取得してチェックリストを描画
+    const { data: eventPerformers } = await supabase
+      .from('event_performers')
+      .select('idol_group_id')
+      .eq('event_id', eventId)
+      .order('sort_order');
+    const checkedIds = (eventPerformers || []).map((p: any) => p.idol_group_id);
+    await loadIdolGroups(user.id, checkedIds);
+
+    // performers テキストから選択済グループ名を除いた残りをフリー入力に復元
+    if (event.performers) {
+      const selectedNames = new Set(idolGroups.filter(g => checkedIds.includes(g.id)).map(g => g.name));
+      const freeText = event.performers.split(/\s*\/\s*/).filter((n: string) => !selectedNames.has(n)).join(' / ');
+      (document.getElementById('event-performers-free') as HTMLInputElement).value = freeText;
+    }
+
     // フォームにデータを設定
     (document.getElementById('event-title') as HTMLInputElement).value = event.title || '';
     (document.getElementById('event-subtitle') as HTMLInputElement).value = event.subtitle || '';
-    (document.getElementById('event-performers') as HTMLInputElement).value = event.performers || '';
     (document.getElementById('venue-name') as HTMLInputElement).value = event.venue_name || '';
     (document.getElementById('venue-map-url') as HTMLInputElement).value = event.venue_map_url || '';
     (document.getElementById('event-description') as HTMLTextAreaElement).value = event.description || '';
@@ -519,6 +589,52 @@ import Layout from '../../../layouts/Layout.astro';
     font-size: 0.8rem;
     color: var(--color-text-muted);
     margin-bottom: 0.25rem;
+  }
+
+  .idol-groups-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .idol-check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    font-size: 0.9rem;
+  }
+
+  .idol-check-item:hover {
+    border-color: var(--color-primary);
+    background: #f0fdf4;
+  }
+
+  .idol-check-item:has(input:checked) {
+    border-color: var(--color-primary);
+    background: #ecfdf5;
+  }
+
+  .idol-check-photo {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .idol-check-photo-empty {
+    display: inline-block;
+    background: var(--color-border);
+  }
+
+  .idol-check-name {
+    font-weight: 500;
   }
 
   .venue-name-row {

@@ -23,8 +23,13 @@ import Layout from '../../../layouts/Layout.astro';
           <input type="text" id="event-subtitle" placeholder="例: 〜夏の特別編〜" />
         </div>
         <div class="form-group">
-          <label for="event-performers">出演者 <span class="required">*</span></label>
-          <input type="text" id="event-performers" required placeholder="例: StarLight / MoonRise" />
+          <label>出演者 <span class="required">*</span></label>
+          <div id="idol-groups-list" class="idol-groups-list">
+            <p class="field-hint">読み込み中...</p>
+          </div>
+          <label for="event-performers-free">その他の出演者（フリー入力）</label>
+          <input type="text" id="event-performers-free" placeholder="例: ゲスト出演者名 / 特別ゲスト" />
+          <p class="field-hint">登録済グループ以外の出演者がいる場合に入力してください。</p>
         </div>
         <div class="form-group">
           <label for="event-description">イベント内容</label>
@@ -114,6 +119,7 @@ import Layout from '../../../layouts/Layout.astro';
 
   let currentUser: any = null;
   let dateIndex = 0;
+  let idolGroups: { id: string; name: string; photo_url: string | null }[] = [];
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
 
   // URLパラメータからコピー元IDを取得
@@ -124,6 +130,31 @@ import Layout from '../../../layouts/Layout.astro';
     messageEl.textContent = text;
     messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
     messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // --- アイドルグループ一覧の描画 ---
+  async function loadIdolGroups(userId: string, checkedIds: string[] = []) {
+    const { data } = await supabase
+      .from('idol_groups')
+      .select('id, name, photo_url')
+      .eq('organizer_id', userId)
+      .order('name');
+
+    idolGroups = data || [];
+    const container = document.getElementById('idol-groups-list')!;
+
+    if (idolGroups.length === 0) {
+      container.innerHTML = `<p class="field-hint">登録済のアイドルグループがありません。<a href="/manage/idols/new">グループを登録</a>してください。</p>`;
+      return;
+    }
+
+    container.innerHTML = idolGroups.map(g => `
+      <label class="idol-check-item">
+        <input type="checkbox" name="idol-group" value="${g.id}" ${checkedIds.includes(g.id) ? 'checked' : ''} />
+        ${g.photo_url ? `<img src="${g.photo_url}" alt="" class="idol-check-photo" />` : '<span class="idol-check-photo idol-check-photo-empty"></span>'}
+        <span class="idol-check-name">${g.name}</span>
+      </label>
+    `).join('');
   }
 
   // --- 日程追加 ---
@@ -249,19 +280,21 @@ import Layout from '../../../layouts/Layout.astro';
   }
 
   // コピー元データの読み込み
-  async function loadCopyData(eventId: string) {
-    const { data: event } = await supabase
-      .from('events')
-      .select('*')
-      .eq('id', eventId)
-      .single();
+  async function loadCopyData(copyId: string) {
+    const [{ data: event }, { data: copyPerformers }] = await Promise.all([
+      supabase.from('events').select('*').eq('id', copyId).single(),
+      supabase.from('event_performers').select('idol_group_id').eq('event_id', copyId).order('sort_order'),
+    ]);
 
     if (!event) return;
+
+    // コピー元の出演グループIDでチェックを再描画
+    const checkedIds = (copyPerformers || []).map((p: any) => p.idol_group_id);
+    await loadIdolGroups(currentUser.id, checkedIds);
 
     document.getElementById('page-title')!.textContent = 'イベントをコピーして新規登録';
     (document.getElementById('event-title') as HTMLInputElement).value = event.title || '';
     (document.getElementById('event-subtitle') as HTMLInputElement).value = event.subtitle || '';
-    (document.getElementById('event-performers') as HTMLInputElement).value = event.performers || '';
     (document.getElementById('venue-name') as HTMLInputElement).value = event.venue_name || '';
     (document.getElementById('venue-map-url') as HTMLInputElement).value = event.venue_map_url || '';
     (document.getElementById('event-description') as HTMLTextAreaElement).value = event.description || '';
@@ -289,11 +322,16 @@ import Layout from '../../../layouts/Layout.astro';
 
     const title = (document.getElementById('event-title') as HTMLInputElement).value.trim();
     const subtitle = (document.getElementById('event-subtitle') as HTMLInputElement).value.trim();
-    const performers = (document.getElementById('event-performers') as HTMLInputElement).value.trim();
+    const performersFree = (document.getElementById('event-performers-free') as HTMLInputElement).value.trim();
     const description = (document.getElementById('event-description') as HTMLTextAreaElement).value.trim();
     const isFree = isFreeCheckbox.checked;
     const priceVal = (document.getElementById('ticket-price') as HTMLInputElement).value;
     const ticketPrice = isFree ? null : (priceVal ? parseInt(priceVal, 10) : null);
+
+    // 選択されたアイドルグループID
+    const selectedGroupIds = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[name="idol-group"]:checked')
+    ).map(el => el.value);
 
     const venueName = (document.getElementById('venue-name') as HTMLInputElement).value.trim();
     const venueMapUrl = (document.getElementById('venue-map-url') as HTMLInputElement).value.trim();
@@ -303,7 +341,10 @@ import Layout from '../../../layouts/Layout.astro';
     const tiktokUrl = (document.getElementById('tiktok-url') as HTMLInputElement).value.trim();
 
     if (!title) { showMessage('イベント名は必須です。', true); return; }
-    if (!performers) { showMessage('出演者は必須です。', true); return; }
+    if (selectedGroupIds.length === 0 && !performersFree) {
+      showMessage('出演者を1組以上選択するか、フリー入力してください。', true);
+      return;
+    }
 
     // 日程の収集
     const dateRows = document.querySelectorAll('.date-row');
@@ -340,13 +381,17 @@ import Layout from '../../../layouts/Layout.astro';
       }
 
       // イベント登録
+      // performers フィールド: 選択グループ名 + フリー入力を結合して保存（表示用）
+      const selectedNames = idolGroups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name);
+      const allPerformers = [...selectedNames, ...(performersFree ? [performersFree] : [])].join(' / ');
+
       const { data: event, error: eventError } = await supabase
         .from('events')
         .insert({
           organizer_id: currentUser.id,
           title,
           subtitle: subtitle || null,
-          performers: performers || null,
+          performers: allPerformers || null,
           venue_name: venueName || null,
           venue_map_url: venueMapUrl || null,
           description: description || null,
@@ -385,6 +430,17 @@ import Layout from '../../../layouts/Layout.astro';
         }
       }
 
+      // 出演アイドルグループをジャンクションテーブルに保存
+      if (selectedGroupIds.length > 0) {
+        const rows = selectedGroupIds.map((gid, i) => ({
+          event_id: event.id,
+          idol_group_id: gid,
+          sort_order: i,
+        }));
+        const { error: perfError } = await supabase.from('event_performers').insert(rows);
+        if (perfError) throw perfError;
+      }
+
       showMessage('イベントを登録しました。リダイレクト中...');
       setTimeout(() => { window.location.href = '/manage/events'; }, 800);
 
@@ -410,6 +466,7 @@ import Layout from '../../../layouts/Layout.astro';
     if (copyFromId) {
       await loadCopyData(copyFromId);
     } else {
+      await loadIdolGroups(user.id);
       addDateRow();
     }
   }
@@ -501,6 +558,52 @@ import Layout from '../../../layouts/Layout.astro';
     border-radius: var(--radius);
     margin-top: 0.5rem;
     object-fit: cover;
+  }
+
+  .idol-groups-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .idol-check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    font-size: 0.9rem;
+  }
+
+  .idol-check-item:hover {
+    border-color: var(--color-primary);
+    background: #f0fdf4;
+  }
+
+  .idol-check-item:has(input:checked) {
+    border-color: var(--color-primary);
+    background: #ecfdf5;
+  }
+
+  .idol-check-photo {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .idol-check-photo-empty {
+    display: inline-block;
+    background: var(--color-border);
+  }
+
+  .idol-check-name {
+    font-weight: 500;
   }
 
   .venue-name-row {
