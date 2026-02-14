@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="ホーム">
   <section class="hero">
-    <h1>アンコール</h1>
+    <h1><img src="/images/andcore_logo.png" alt="アンコール" class="hero-logo" /></h1>
     <p class="subtitle">特典会をもっと特別な体験に</p>
     <p class="description">
       デジタルチケット、写真撮影、推し活ランキング。<br />
@@ -30,6 +30,34 @@ import Layout from '../layouts/Layout.astro';
       <p>あなたの推し活を可視化。ランクアップで特別な体験をアンロック。</p>
     </div>
   </section>
+
+  <section class="pwa-install">
+    <h2>アプリとして使う</h2>
+    <p class="pwa-description">ホーム画面に追加すると、アプリのようにすぐアクセスできます。</p>
+
+    <div class="pwa-tabs">
+      <button class="pwa-tab active" data-tab="iphone">iPhone</button>
+      <button class="pwa-tab" data-tab="android">Android</button>
+    </div>
+
+    <div class="pwa-content" id="pwa-iphone">
+      <ol class="pwa-steps">
+        <li><strong>Safari</strong> でこのページを開く</li>
+        <li>画面下の <strong>共有ボタン（↑）</strong> をタップ</li>
+        <li><strong>「ホーム画面に追加」</strong> をタップ</li>
+        <li><strong>「追加」</strong> をタップして完了</li>
+      </ol>
+    </div>
+
+    <div class="pwa-content hidden" id="pwa-android">
+      <ol class="pwa-steps">
+        <li><strong>Chrome</strong> でこのページを開く</li>
+        <li>右上の <strong>メニュー（⋮）</strong> をタップ</li>
+        <li><strong>「ホーム画面に追加」</strong> または <strong>「アプリをインストール」</strong> をタップ</li>
+        <li><strong>「インストール」</strong> をタップして完了</li>
+      </ol>
+    </div>
+  </section>
 </Layout>
 
 <style>
@@ -39,12 +67,12 @@ import Layout from '../layouts/Layout.astro';
   }
 
   .hero h1 {
-    font-size: 2.5rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, var(--color-primary), #ec4899);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    line-height: 1;
+  }
+
+  .hero-logo {
+    height: 64px;
+    width: auto;
   }
 
   .subtitle {
@@ -121,4 +149,112 @@ import Layout from '../layouts/Layout.astro';
     color: var(--color-text-muted);
     font-size: 0.9rem;
   }
+
+  /* PWA Install Section */
+  .pwa-install {
+    margin-top: 3rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+
+  .pwa-install h2 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .pwa-description {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .pwa-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .pwa-tab {
+    padding: 0.5rem 1.5rem;
+    border: 1.5px solid var(--color-border);
+    border-radius: 9999px;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .pwa-tab.active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .pwa-content {
+    text-align: left;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .pwa-content.hidden {
+    display: none;
+  }
+
+  .pwa-steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+  }
+
+  .pwa-steps li {
+    counter-increment: step;
+    padding: 0.6rem 0;
+    padding-left: 2.5rem;
+    position: relative;
+    font-size: 0.9rem;
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .pwa-steps li:last-child {
+    border-bottom: none;
+  }
+
+  .pwa-steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0.6rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 </style>
+
+<script>
+  const tabs = document.querySelectorAll('.pwa-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const target = tab.getAttribute('data-tab');
+      document.querySelectorAll('.pwa-content').forEach(c => c.classList.add('hidden'));
+      document.getElementById(`pwa-${target}`)?.classList.remove('hidden');
+    });
+  });
+</script>
