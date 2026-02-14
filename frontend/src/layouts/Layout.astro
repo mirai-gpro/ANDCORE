@@ -19,7 +19,7 @@ const { title } = Astro.props;
   <body>
     <header class="header">
       <nav class="nav">
-        <a href="/" class="logo">アンコール</a>
+        <a href="/" class="logo"><img src="/images/andcore_logo.png" alt="アンコール" class="logo-img" /></a>
         <div id="nav-links" class="nav-links">
           <a href="/events">イベント</a>
           <a href="/for-organizers" class="nav-biz">運営者様ページ</a>
@@ -136,9 +136,13 @@ const { title } = Astro.props;
   }
 
   .logo {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+  }
+
+  .logo-img {
+    height: 32px;
+    width: auto;
   }
 
   .nav-links {
