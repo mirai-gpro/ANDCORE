@@ -4,7 +4,7 @@
 -- =====================================================
 
 -- 1. idol_groups: アイドルグループ
-create table idol_groups (
+create table if not exists idol_groups (
   id uuid primary key default uuid_generate_v4(),
   organizer_id uuid not null references profiles(id) on delete cascade,
   name text not null,
@@ -15,14 +15,16 @@ create table idol_groups (
 );
 
 comment on table idol_groups is 'アイドルグループ（運営者が管理）';
-create index idx_idol_groups_organizer on idol_groups(organizer_id);
+create index if not exists idx_idol_groups_organizer on idol_groups(organizer_id);
 
+-- trigger: 既存なら再作成
+drop trigger if exists idol_groups_updated_at on idol_groups;
 create trigger idol_groups_updated_at
   before update on idol_groups
   for each row execute function update_updated_at();
 
 -- 2. idol_group_admins: グループの管理Googleアカウント（運営者含む複数人）
-create table idol_group_admins (
+create table if not exists idol_group_admins (
   group_id uuid not null references idol_groups(id) on delete cascade,
   admin_email text not null,
   created_at timestamptz not null default now(),
@@ -32,7 +34,7 @@ create table idol_group_admins (
 comment on table idol_group_admins is 'グループ管理者のGoogleアカウント';
 
 -- 3. idol_members: グループ所属メンバー
-create table idol_members (
+create table if not exists idol_members (
   id uuid primary key default uuid_generate_v4(),
   group_id uuid not null references idol_groups(id) on delete cascade,
   name text not null,
@@ -45,9 +47,10 @@ create table idol_members (
 );
 
 comment on table idol_members is 'アイドルグループの個別メンバー';
-create index idx_idol_members_group on idol_members(group_id, sort_order);
-create index idx_idol_members_profile on idol_members(profile_id);
+create index if not exists idx_idol_members_group on idol_members(group_id, sort_order);
+create index if not exists idx_idol_members_profile on idol_members(profile_id);
 
+drop trigger if exists idol_members_updated_at on idol_members;
 create trigger idol_members_updated_at
   before update on idol_members
   for each row execute function update_updated_at();
@@ -59,9 +62,11 @@ create trigger idol_members_updated_at
 -- idol_groups
 alter table idol_groups enable row level security;
 
+drop policy if exists "idol_groups: 全ユーザーが閲覧可能" on idol_groups;
 create policy "idol_groups: 全ユーザーが閲覧可能"
   on idol_groups for select using (true);
 
+drop policy if exists "idol_groups: organizer/adminが作成可能" on idol_groups;
 create policy "idol_groups: organizer/adminが作成可能"
   on idol_groups for insert
   with check (
@@ -69,6 +74,7 @@ create policy "idol_groups: organizer/adminが作成可能"
     and exists (select 1 from profiles where id = auth.uid() and role in ('organizer', 'admin'))
   );
 
+drop policy if exists "idol_groups: 自分のグループまたはadminが更新可能" on idol_groups;
 create policy "idol_groups: 自分のグループまたはadminが更新可能"
   on idol_groups for update
   using (
@@ -76,6 +82,7 @@ create policy "idol_groups: 自分のグループまたはadminが更新可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "idol_groups: 自分のグループまたはadminが削除可能" on idol_groups;
 create policy "idol_groups: 自分のグループまたはadminが削除可能"
   on idol_groups for delete
   using (
@@ -86,6 +93,7 @@ create policy "idol_groups: 自分のグループまたはadminが削除可能"
 -- idol_group_admins
 alter table idol_group_admins enable row level security;
 
+drop policy if exists "idol_group_admins: 関係者が閲覧可能" on idol_group_admins;
 create policy "idol_group_admins: 関係者が閲覧可能"
   on idol_group_admins for select
   using (
@@ -96,6 +104,7 @@ create policy "idol_group_admins: 関係者が閲覧可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "idol_group_admins: グループオーナーが管理可能" on idol_group_admins;
 create policy "idol_group_admins: グループオーナーが管理可能"
   on idol_group_admins for insert
   with check (
@@ -106,6 +115,7 @@ create policy "idol_group_admins: グループオーナーが管理可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "idol_group_admins: グループオーナーが削除可能" on idol_group_admins;
 create policy "idol_group_admins: グループオーナーが削除可能"
   on idol_group_admins for delete
   using (
@@ -119,9 +129,11 @@ create policy "idol_group_admins: グループオーナーが削除可能"
 -- idol_members
 alter table idol_members enable row level security;
 
+drop policy if exists "idol_members: 全ユーザーが閲覧可能" on idol_members;
 create policy "idol_members: 全ユーザーが閲覧可能"
   on idol_members for select using (true);
 
+drop policy if exists "idol_members: グループオーナーが作成可能" on idol_members;
 create policy "idol_members: グループオーナーが作成可能"
   on idol_members for insert
   with check (
@@ -132,6 +144,7 @@ create policy "idol_members: グループオーナーが作成可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "idol_members: グループオーナーが更新可能" on idol_members;
 create policy "idol_members: グループオーナーが更新可能"
   on idol_members for update
   using (
@@ -142,6 +155,7 @@ create policy "idol_members: グループオーナーが更新可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "idol_members: グループオーナーが削除可能" on idol_members;
 create policy "idol_members: グループオーナーが削除可能"
   on idol_members for delete
   using (
