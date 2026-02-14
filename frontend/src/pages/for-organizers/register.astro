@@ -109,6 +109,11 @@ const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
       return;
     }
 
+    if (!data.session) {
+      showMessage('セッションの取得に失敗しました。もう一度お試しください。', true);
+      return;
+    }
+
     // ロールを organizer に設定
     const { error: updateError } = await supabase.auth.updateUser({
       data: { role: 'organizer' },
