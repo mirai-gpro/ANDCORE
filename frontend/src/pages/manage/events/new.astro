@@ -1,0 +1,613 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="イベント新規登録">
+  <div class="page">
+    <a href="/manage/events" class="back-link">&larr; イベント管理に戻る</a>
+    <h1 id="page-title">イベント新規登録</h1>
+    <p class="subtitle">イベント情報を入力してください</p>
+
+    <div id="auth-message" class="message hidden"></div>
+
+    <form id="event-form" class="form">
+      <!-- 基本情報 -->
+      <fieldset class="fieldset">
+        <legend>基本情報</legend>
+        <div class="form-group">
+          <label for="event-title">イベント名 <span class="required">*</span></label>
+          <input type="text" id="event-title" required placeholder="例: ANDCORE 特典会 Vol.3" />
+        </div>
+        <div class="form-group">
+          <label for="event-subtitle">サブタイトル</label>
+          <input type="text" id="event-subtitle" placeholder="例: 〜夏の特別編〜" />
+        </div>
+        <div class="form-group">
+          <label for="event-performers">出演者 <span class="required">*</span></label>
+          <input type="text" id="event-performers" required placeholder="例: StarLight / MoonRise" />
+        </div>
+        <div class="form-group">
+          <label for="event-description">イベント内容</label>
+          <textarea id="event-description" rows="4" placeholder="イベントの説明を入力..."></textarea>
+        </div>
+      </fieldset>
+
+      <!-- 会場 -->
+      <fieldset class="fieldset">
+        <legend>会場</legend>
+        <div class="form-group">
+          <label for="venue-name">会場名</label>
+          <input type="text" id="venue-name" placeholder="例: 渋谷TSUTAYA O-EAST" />
+        </div>
+        <div class="form-group">
+          <label for="venue-map-url">GoogleMap リンク</label>
+          <input type="url" id="venue-map-url" placeholder="GoogleMapで会場を検索 → 共有 → URLを貼り付け" />
+          <p class="field-hint">GoogleMapで会場を開き「共有」ボタンからリンクをコピーしてください。</p>
+        </div>
+      </fieldset>
+
+      <!-- 開催日程 -->
+      <fieldset class="fieldset">
+        <legend>開催日程</legend>
+        <p class="field-hint">複数日程がある場合は「日程を追加」で追加できます。各日程に複数回の時間帯を設定可能です。</p>
+        <div id="dates-container"></div>
+        <button type="button" id="add-date-btn" class="btn-add">+ 日程を追加</button>
+      </fieldset>
+
+      <!-- チケット -->
+      <fieldset class="fieldset">
+        <legend>チケット代金</legend>
+        <div class="form-group">
+          <div class="price-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="is-free" />
+              無料イベント
+            </label>
+          </div>
+        </div>
+        <div class="form-group" id="price-group">
+          <label for="ticket-price">代金（円）</label>
+          <input type="number" id="ticket-price" min="0" step="100" placeholder="例: 3000" />
+        </div>
+      </fieldset>
+
+      <!-- 画像 -->
+      <fieldset class="fieldset">
+        <legend>イベント画像</legend>
+        <div class="form-group">
+          <input type="file" id="event-image" accept="image/*" />
+          <div id="image-preview" class="photo-preview hidden"></div>
+        </div>
+      </fieldset>
+
+      <!-- SNSリンク -->
+      <fieldset class="fieldset">
+        <legend>SNSリンク</legend>
+        <div class="form-group">
+          <label for="youtube-url">YouTube</label>
+          <input type="url" id="youtube-url" placeholder="https://youtube.com/..." />
+        </div>
+        <div class="form-group">
+          <label for="x-url">X (Twitter)</label>
+          <input type="url" id="x-url" placeholder="https://x.com/..." />
+        </div>
+        <div class="form-group">
+          <label for="instagram-url">Instagram</label>
+          <input type="url" id="instagram-url" placeholder="https://instagram.com/..." />
+        </div>
+        <div class="form-group">
+          <label for="tiktok-url">TikTok</label>
+          <input type="url" id="tiktok-url" placeholder="https://tiktok.com/..." />
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn-submit">イベントを登録</button>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../../lib/supabase';
+
+  let currentUser: any = null;
+  let dateIndex = 0;
+  const messageEl = document.getElementById('auth-message') as HTMLDivElement;
+
+  // URLパラメータからコピー元IDを取得
+  const params = new URLSearchParams(window.location.search);
+  const copyFromId = params.get('copy');
+
+  function showMessage(text: string, isError = false) {
+    messageEl.textContent = text;
+    messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
+    messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // --- 日程追加 ---
+  function addDateRow(dateValue?: string, slots?: { start_time: string; door_time: string }[]) {
+    const container = document.getElementById('dates-container')!;
+    const idx = dateIndex++;
+    const row = document.createElement('div');
+    row.className = 'date-row';
+    row.dataset.idx = String(idx);
+    row.innerHTML = `
+      <div class="date-header">
+        <span class="date-label">日程 ${idx + 1}</span>
+        <button type="button" class="btn-remove-date" data-idx="${idx}">&times; 削除</button>
+      </div>
+      <div class="form-group">
+        <label>開催日 <span class="required">*</span></label>
+        <input type="date" class="date-input" data-idx="${idx}" required value="${dateValue || ''}" />
+      </div>
+      <div class="slots-container" data-idx="${idx}"></div>
+      <button type="button" class="btn-add-slot" data-idx="${idx}">+ 時間帯を追加</button>
+    `;
+    container.appendChild(row);
+
+    // 初期時間帯を追加
+    if (slots && slots.length > 0) {
+      slots.forEach(s => addSlotRow(idx, s.door_time, s.start_time));
+    } else {
+      addSlotRow(idx);
+    }
+  }
+
+  function addSlotRow(dateIdx: number, doorTime?: string, startTime?: string) {
+    const container = document.querySelector(`.slots-container[data-idx="${dateIdx}"]`)!;
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'slot-row';
+    slotDiv.innerHTML = `
+      <div class="slot-fields">
+        <div class="form-group">
+          <label>開場時間</label>
+          <input type="time" class="door-time" value="${doorTime || ''}" />
+        </div>
+        <div class="form-group">
+          <label>開始時間 <span class="required">*</span></label>
+          <input type="time" class="start-time" required value="${startTime || ''}" />
+        </div>
+      </div>
+      <button type="button" class="btn-remove-slot">&times;</button>
+    `;
+    container.appendChild(slotDiv);
+  }
+
+  // イベントリスナー: 日程追加
+  document.getElementById('add-date-btn')!.addEventListener('click', () => addDateRow());
+
+  // イベントリスナー: 日程削除・時間帯追加/削除（イベント委任）
+  document.getElementById('dates-container')!.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+
+    // 日程削除
+    const removeDate = target.closest('.btn-remove-date') as HTMLElement;
+    if (removeDate) {
+      removeDate.closest('.date-row')!.remove();
+      return;
+    }
+
+    // 時間帯追加
+    const addSlot = target.closest('.btn-add-slot') as HTMLElement;
+    if (addSlot) {
+      addSlotRow(Number(addSlot.dataset.idx));
+      return;
+    }
+
+    // 時間帯削除
+    const removeSlot = target.closest('.btn-remove-slot') as HTMLElement;
+    if (removeSlot) {
+      removeSlot.closest('.slot-row')!.remove();
+      return;
+    }
+  });
+
+  // 無料チェックボックス
+  const isFreeCheckbox = document.getElementById('is-free') as HTMLInputElement;
+  const priceGroup = document.getElementById('price-group') as HTMLDivElement;
+  isFreeCheckbox.addEventListener('change', () => {
+    priceGroup.style.display = isFreeCheckbox.checked ? 'none' : 'flex';
+    if (isFreeCheckbox.checked) {
+      (document.getElementById('ticket-price') as HTMLInputElement).value = '';
+    }
+  });
+
+  // 画像プレビュー
+  document.getElementById('event-image')!.addEventListener('change', (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    const preview = document.getElementById('image-preview')!;
+    if (file) {
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${url}" alt="プレビュー" />`;
+      preview.classList.remove('hidden');
+    } else {
+      preview.classList.add('hidden');
+    }
+  });
+
+  // 画像アップロード
+  async function uploadImage(file: File, path: string): Promise<string | null> {
+    const { data, error } = await supabase.storage
+      .from('photos')
+      .upload(path, file, { upsert: true });
+    if (error) { console.error('Upload error:', error); return null; }
+    const { data: urlData } = supabase.storage.from('photos').getPublicUrl(data.path);
+    return urlData.publicUrl;
+  }
+
+  // コピー元データの読み込み
+  async function loadCopyData(eventId: string) {
+    const { data: event } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', eventId)
+      .single();
+
+    if (!event) return;
+
+    document.getElementById('page-title')!.textContent = 'イベントをコピーして新規登録';
+    (document.getElementById('event-title') as HTMLInputElement).value = event.title || '';
+    (document.getElementById('event-subtitle') as HTMLInputElement).value = event.subtitle || '';
+    (document.getElementById('event-performers') as HTMLInputElement).value = event.performers || '';
+    (document.getElementById('venue-name') as HTMLInputElement).value = event.venue_name || '';
+    (document.getElementById('venue-map-url') as HTMLInputElement).value = event.venue_map_url || '';
+    (document.getElementById('event-description') as HTMLTextAreaElement).value = event.description || '';
+    (document.getElementById('youtube-url') as HTMLInputElement).value = event.youtube_url || '';
+    (document.getElementById('x-url') as HTMLInputElement).value = event.x_url || '';
+    (document.getElementById('instagram-url') as HTMLInputElement).value = event.instagram_url || '';
+    (document.getElementById('tiktok-url') as HTMLInputElement).value = event.tiktok_url || '';
+
+    if (event.ticket_price == null) {
+      isFreeCheckbox.checked = true;
+      priceGroup.style.display = 'none';
+    } else {
+      (document.getElementById('ticket-price') as HTMLInputElement).value = String(event.ticket_price);
+    }
+
+    // 日程はコピーしない（新しい日程を入力してもらう）ので1つだけ空で追加
+    addDateRow();
+  }
+
+  // --- フォーム送信 ---
+  const form = document.getElementById('event-form') as HTMLFormElement;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const title = (document.getElementById('event-title') as HTMLInputElement).value.trim();
+    const subtitle = (document.getElementById('event-subtitle') as HTMLInputElement).value.trim();
+    const performers = (document.getElementById('event-performers') as HTMLInputElement).value.trim();
+    const description = (document.getElementById('event-description') as HTMLTextAreaElement).value.trim();
+    const isFree = isFreeCheckbox.checked;
+    const priceVal = (document.getElementById('ticket-price') as HTMLInputElement).value;
+    const ticketPrice = isFree ? null : (priceVal ? parseInt(priceVal, 10) : null);
+
+    const venueName = (document.getElementById('venue-name') as HTMLInputElement).value.trim();
+    const venueMapUrl = (document.getElementById('venue-map-url') as HTMLInputElement).value.trim();
+    const youtubeUrl = (document.getElementById('youtube-url') as HTMLInputElement).value.trim();
+    const xUrl = (document.getElementById('x-url') as HTMLInputElement).value.trim();
+    const instagramUrl = (document.getElementById('instagram-url') as HTMLInputElement).value.trim();
+    const tiktokUrl = (document.getElementById('tiktok-url') as HTMLInputElement).value.trim();
+
+    if (!title) { showMessage('イベント名は必須です。', true); return; }
+    if (!performers) { showMessage('出演者は必須です。', true); return; }
+
+    // 日程の収集
+    const dateRows = document.querySelectorAll('.date-row');
+    if (dateRows.length === 0) { showMessage('日程を1つ以上追加してください。', true); return; }
+
+    const dates: { date: string; slots: { start_time: string; door_time: string }[] }[] = [];
+    for (const row of dateRows) {
+      const dateInput = row.querySelector('.date-input') as HTMLInputElement;
+      if (!dateInput.value) { showMessage('開催日を入力してください。', true); return; }
+
+      const slots: { start_time: string; door_time: string }[] = [];
+      const slotRows = row.querySelectorAll('.slot-row');
+      for (const slotRow of slotRows) {
+        const startTime = (slotRow.querySelector('.start-time') as HTMLInputElement).value;
+        const doorTime = (slotRow.querySelector('.door-time') as HTMLInputElement).value;
+        if (!startTime) { showMessage('開始時間を入力してください。', true); return; }
+        slots.push({ start_time: startTime, door_time: doorTime || startTime });
+      }
+
+      dates.push({ date: dateInput.value, slots });
+    }
+
+    showMessage('登録中...');
+    const submitBtn = form.querySelector('.btn-submit') as HTMLButtonElement;
+    submitBtn.disabled = true;
+
+    try {
+      // 画像アップロード
+      let imageUrl: string | null = null;
+      const imageFile = (document.getElementById('event-image') as HTMLInputElement).files?.[0];
+      if (imageFile) {
+        const path = `events/${currentUser.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
+        imageUrl = await uploadImage(imageFile, path);
+      }
+
+      // イベント登録
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .insert({
+          organizer_id: currentUser.id,
+          title,
+          subtitle: subtitle || null,
+          performers: performers || null,
+          venue_name: venueName || null,
+          venue_map_url: venueMapUrl || null,
+          description: description || null,
+          ticket_price: ticketPrice,
+          image_url: imageUrl,
+          youtube_url: youtubeUrl || null,
+          x_url: xUrl || null,
+          instagram_url: instagramUrl || null,
+          tiktok_url: tiktokUrl || null,
+          status: 'scheduled',
+        })
+        .select('id')
+        .single();
+
+      if (eventError) throw eventError;
+
+      // 日程と時間帯を登録
+      for (const d of dates) {
+        const { data: dateRow, error: dateError } = await supabase
+          .from('event_dates')
+          .insert({ event_id: event.id, event_date: d.date })
+          .select('id')
+          .single();
+
+        if (dateError) throw dateError;
+
+        for (const slot of d.slots) {
+          const { error: slotError } = await supabase
+            .from('event_time_slots')
+            .insert({
+              event_date_id: dateRow.id,
+              start_time: slot.start_time,
+              door_time: slot.door_time,
+            });
+          if (slotError) throw slotError;
+        }
+      }
+
+      showMessage('イベントを登録しました。リダイレクト中...');
+      setTimeout(() => { window.location.href = '/manage/events'; }, 800);
+
+    } catch (err: any) {
+      showMessage('エラーが発生しました: ' + (err.message || err), true);
+      submitBtn.disabled = false;
+    }
+  });
+
+  // --- 初期化 ---
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = '/auth/login'; return; }
+
+    const role = user.user_metadata?.role;
+    if (role !== 'organizer' && role !== 'admin') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    currentUser = user;
+
+    if (copyFromId) {
+      await loadCopyData(copyFromId);
+    } else {
+      addDateRow();
+    }
+  }
+
+  init();
+</script>
+
+<style>
+  .page { max-width: 680px; margin: 0 auto; }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+  .back-link:hover { color: var(--color-primary); }
+
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+
+  .subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  .form { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    background: var(--color-surface);
+    box-shadow: var(--shadow);
+  }
+
+  .fieldset legend {
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 0 0.5rem;
+  }
+
+  .field-hint {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 1rem;
+  }
+  .form-group:last-child { margin-bottom: 0; }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .required { color: #ef4444; }
+
+  .form-group input[type="text"],
+  .form-group input[type="url"],
+  .form-group input[type="number"],
+  .form-group input[type="date"],
+  .form-group input[type="time"],
+  .form-group textarea {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus {
+    border-color: var(--color-primary);
+  }
+
+  .form-group input[type="file"] { font-size: 0.85rem; }
+
+  .photo-preview img {
+    max-width: 300px;
+    max-height: 200px;
+    border-radius: var(--radius);
+    margin-top: 0.5rem;
+    object-fit: cover;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .price-row { flex-direction: row; }
+
+  /* 日程行 */
+  .date-row {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: #fafafa;
+  }
+
+  .date-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .date-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .btn-remove-date, .btn-remove-slot {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+  }
+  .btn-remove-date:hover, .btn-remove-slot:hover { text-decoration: underline; }
+
+  /* 時間帯行 */
+  .slot-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+  }
+
+  .slot-fields {
+    display: flex;
+    gap: 0.75rem;
+    flex: 1;
+  }
+
+  .slot-fields .form-group { margin-bottom: 0; flex: 1; }
+
+  .btn-remove-slot {
+    flex-shrink: 0;
+    margin-bottom: 0.375rem;
+  }
+
+  .btn-add, .btn-add-slot {
+    width: 100%;
+    padding: 0.6rem;
+    background: transparent;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    margin-top: 0.5rem;
+  }
+
+  .btn-add:hover, .btn-add-slot:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .btn-add-slot {
+    border-width: 1px;
+    border-style: dashed;
+    font-size: 0.8rem;
+    padding: 0.4rem;
+  }
+
+  .btn-submit {
+    width: 100%;
+    padding: 0.875rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-submit:hover { background: var(--color-primary-dark); }
+  .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .message {
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+  .message-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+  .message-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .hidden { display: none; }
+
+  @media (max-width: 600px) {
+    .slot-fields { flex-direction: column; gap: 0.5rem; }
+  }
+</style>

@@ -1,5 +1,5 @@
 export type UserRole = 'fan' | 'idol' | 'admin';
-export type EventStatus = 'scheduled' | 'active' | 'completed';
+export type EventStatus = 'scheduled' | 'active' | 'completed' | 'cancelled';
 export type TicketStatus = 'valid' | 'used' | 'expired';
 export type MediaType = 'photo' | 'video';
 export type MediaStatus = 'pending_review' | 'published';
@@ -38,23 +38,89 @@ export interface Database {
           id: string;
           organizer_id: string;
           title: string;
+          subtitle: string | null;
+          performers: string | null;
+          venue_name: string | null;
+          venue_map_url: string | null;
+          description: string | null;
           event_date: string | null;
           location: string | null;
+          ticket_price: number | null;
+          image_url: string | null;
+          youtube_url: string | null;
+          x_url: string | null;
+          instagram_url: string | null;
+          tiktok_url: string | null;
           status: EventStatus;
           created_at: string;
         };
         Insert: {
           organizer_id: string;
           title: string;
+          subtitle?: string | null;
+          performers?: string | null;
+          venue_name?: string | null;
+          venue_map_url?: string | null;
+          description?: string | null;
           event_date?: string | null;
           location?: string | null;
+          ticket_price?: number | null;
+          image_url?: string | null;
+          youtube_url?: string | null;
+          x_url?: string | null;
+          instagram_url?: string | null;
+          tiktok_url?: string | null;
           status?: EventStatus;
         };
         Update: {
           title?: string;
+          subtitle?: string | null;
+          performers?: string | null;
+          venue_name?: string | null;
+          venue_map_url?: string | null;
+          description?: string | null;
           event_date?: string | null;
           location?: string | null;
+          ticket_price?: number | null;
+          image_url?: string | null;
+          youtube_url?: string | null;
+          x_url?: string | null;
+          instagram_url?: string | null;
+          tiktok_url?: string | null;
           status?: EventStatus;
+        };
+      };
+      event_dates: {
+        Row: {
+          id: string;
+          event_id: string;
+          event_date: string;
+          created_at: string;
+        };
+        Insert: {
+          event_id: string;
+          event_date: string;
+        };
+        Update: {
+          event_date?: string;
+        };
+      };
+      event_time_slots: {
+        Row: {
+          id: string;
+          event_date_id: string;
+          start_time: string;
+          door_time: string;
+          created_at: string;
+        };
+        Insert: {
+          event_date_id: string;
+          start_time: string;
+          door_time: string;
+        };
+        Update: {
+          start_time?: string;
+          door_time?: string;
         };
       };
       ticket_products: {

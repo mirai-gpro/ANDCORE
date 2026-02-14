@@ -1,0 +1,626 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="イベント編集">
+  <div class="page">
+    <a href="/manage/events" class="back-link">&larr; イベント管理に戻る</a>
+    <h1>イベント編集</h1>
+    <p class="subtitle">イベント情報を更新できます</p>
+
+    <div id="loading" class="loading">読み込み中...</div>
+    <div id="auth-message" class="message hidden"></div>
+
+    <form id="event-form" class="form hidden">
+      <!-- 基本情報 -->
+      <fieldset class="fieldset">
+        <legend>基本情報</legend>
+        <div class="form-group">
+          <label for="event-title">イベント名 <span class="required">*</span></label>
+          <input type="text" id="event-title" required />
+        </div>
+        <div class="form-group">
+          <label for="event-subtitle">サブタイトル</label>
+          <input type="text" id="event-subtitle" />
+        </div>
+        <div class="form-group">
+          <label for="event-performers">出演者 <span class="required">*</span></label>
+          <input type="text" id="event-performers" required />
+        </div>
+        <div class="form-group">
+          <label for="event-description">イベント内容</label>
+          <textarea id="event-description" rows="4"></textarea>
+        </div>
+      </fieldset>
+
+      <!-- 会場 -->
+      <fieldset class="fieldset">
+        <legend>会場</legend>
+        <div class="form-group">
+          <label for="venue-name">会場名</label>
+          <input type="text" id="venue-name" />
+        </div>
+        <div class="form-group">
+          <label for="venue-map-url">GoogleMap リンク</label>
+          <input type="url" id="venue-map-url" />
+          <p class="field-hint">GoogleMapで会場を開き「共有」ボタンからリンクをコピーしてください。</p>
+        </div>
+      </fieldset>
+
+      <!-- 開催日程 -->
+      <fieldset class="fieldset">
+        <legend>開催日程</legend>
+        <p class="field-hint">複数日程がある場合は「日程を追加」で追加できます。</p>
+        <div id="dates-container"></div>
+        <button type="button" id="add-date-btn" class="btn-add">+ 日程を追加</button>
+      </fieldset>
+
+      <!-- チケット -->
+      <fieldset class="fieldset">
+        <legend>チケット代金</legend>
+        <div class="form-group">
+          <div class="price-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="is-free" />
+              無料イベント
+            </label>
+          </div>
+        </div>
+        <div class="form-group" id="price-group">
+          <label for="ticket-price">代金（円）</label>
+          <input type="number" id="ticket-price" min="0" step="100" />
+        </div>
+      </fieldset>
+
+      <!-- 画像 -->
+      <fieldset class="fieldset">
+        <legend>イベント画像</legend>
+        <div class="form-group">
+          <div id="current-image" class="current-image hidden"></div>
+          <input type="file" id="event-image" accept="image/*" />
+          <div id="image-preview" class="photo-preview hidden"></div>
+        </div>
+      </fieldset>
+
+      <!-- SNSリンク -->
+      <fieldset class="fieldset">
+        <legend>SNSリンク</legend>
+        <div class="form-group">
+          <label for="youtube-url">YouTube</label>
+          <input type="url" id="youtube-url" />
+        </div>
+        <div class="form-group">
+          <label for="x-url">X (Twitter)</label>
+          <input type="url" id="x-url" />
+        </div>
+        <div class="form-group">
+          <label for="instagram-url">Instagram</label>
+          <input type="url" id="instagram-url" />
+        </div>
+        <div class="form-group">
+          <label for="tiktok-url">TikTok</label>
+          <input type="url" id="tiktok-url" />
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn-submit">変更を保存</button>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../../lib/supabase';
+
+  let currentUser: any = null;
+  let eventId = '';
+  let dateIndex = 0;
+  const messageEl = document.getElementById('auth-message') as HTMLDivElement;
+
+  // URLからイベントIDを取得
+  const pathParts = window.location.pathname.split('/');
+  eventId = pathParts[pathParts.length - 1];
+
+  function showMessage(text: string, isError = false) {
+    messageEl.textContent = text;
+    messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
+    messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // --- 日程追加 ---
+  function addDateRow(dateValue?: string, slots?: { start_time: string; door_time: string }[]) {
+    const container = document.getElementById('dates-container')!;
+    const idx = dateIndex++;
+    const row = document.createElement('div');
+    row.className = 'date-row';
+    row.dataset.idx = String(idx);
+    row.innerHTML = `
+      <div class="date-header">
+        <span class="date-label">日程 ${idx + 1}</span>
+        <button type="button" class="btn-remove-date" data-idx="${idx}">&times; 削除</button>
+      </div>
+      <div class="form-group">
+        <label>開催日 <span class="required">*</span></label>
+        <input type="date" class="date-input" data-idx="${idx}" required value="${dateValue || ''}" />
+      </div>
+      <div class="slots-container" data-idx="${idx}"></div>
+      <button type="button" class="btn-add-slot" data-idx="${idx}">+ 時間帯を追加</button>
+    `;
+    container.appendChild(row);
+
+    if (slots && slots.length > 0) {
+      slots.forEach(s => addSlotRow(idx, s.door_time, s.start_time));
+    } else {
+      addSlotRow(idx);
+    }
+  }
+
+  function addSlotRow(dateIdx: number, doorTime?: string, startTime?: string) {
+    const container = document.querySelector(`.slots-container[data-idx="${dateIdx}"]`)!;
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'slot-row';
+    slotDiv.innerHTML = `
+      <div class="slot-fields">
+        <div class="form-group">
+          <label>開場時間</label>
+          <input type="time" class="door-time" value="${doorTime || ''}" />
+        </div>
+        <div class="form-group">
+          <label>開始時間 <span class="required">*</span></label>
+          <input type="time" class="start-time" required value="${startTime || ''}" />
+        </div>
+      </div>
+      <button type="button" class="btn-remove-slot">&times;</button>
+    `;
+    container.appendChild(slotDiv);
+  }
+
+  // イベントリスナー
+  document.getElementById('add-date-btn')!.addEventListener('click', () => addDateRow());
+
+  document.getElementById('dates-container')!.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const removeDate = target.closest('.btn-remove-date') as HTMLElement;
+    if (removeDate) { removeDate.closest('.date-row')!.remove(); return; }
+    const addSlot = target.closest('.btn-add-slot') as HTMLElement;
+    if (addSlot) { addSlotRow(Number(addSlot.dataset.idx)); return; }
+    const removeSlot = target.closest('.btn-remove-slot') as HTMLElement;
+    if (removeSlot) { removeSlot.closest('.slot-row')!.remove(); return; }
+  });
+
+  const isFreeCheckbox = document.getElementById('is-free') as HTMLInputElement;
+  const priceGroup = document.getElementById('price-group') as HTMLDivElement;
+  isFreeCheckbox.addEventListener('change', () => {
+    priceGroup.style.display = isFreeCheckbox.checked ? 'none' : 'flex';
+    if (isFreeCheckbox.checked) {
+      (document.getElementById('ticket-price') as HTMLInputElement).value = '';
+    }
+  });
+
+  document.getElementById('event-image')!.addEventListener('change', (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    const preview = document.getElementById('image-preview')!;
+    if (file) {
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${url}" alt="プレビュー" />`;
+      preview.classList.remove('hidden');
+    } else {
+      preview.classList.add('hidden');
+    }
+  });
+
+  async function uploadImage(file: File, path: string): Promise<string | null> {
+    const { data, error } = await supabase.storage
+      .from('photos')
+      .upload(path, file, { upsert: true });
+    if (error) { console.error('Upload error:', error); return null; }
+    const { data: urlData } = supabase.storage.from('photos').getPublicUrl(data.path);
+    return urlData.publicUrl;
+  }
+
+  // --- フォーム送信 ---
+  const form = document.getElementById('event-form') as HTMLFormElement;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const title = (document.getElementById('event-title') as HTMLInputElement).value.trim();
+    const subtitle = (document.getElementById('event-subtitle') as HTMLInputElement).value.trim();
+    const performers = (document.getElementById('event-performers') as HTMLInputElement).value.trim();
+    const description = (document.getElementById('event-description') as HTMLTextAreaElement).value.trim();
+    const isFree = isFreeCheckbox.checked;
+    const priceVal = (document.getElementById('ticket-price') as HTMLInputElement).value;
+    const ticketPrice = isFree ? null : (priceVal ? parseInt(priceVal, 10) : null);
+
+    const venueName = (document.getElementById('venue-name') as HTMLInputElement).value.trim();
+    const venueMapUrl = (document.getElementById('venue-map-url') as HTMLInputElement).value.trim();
+    const youtubeUrl = (document.getElementById('youtube-url') as HTMLInputElement).value.trim();
+    const xUrl = (document.getElementById('x-url') as HTMLInputElement).value.trim();
+    const instagramUrl = (document.getElementById('instagram-url') as HTMLInputElement).value.trim();
+    const tiktokUrl = (document.getElementById('tiktok-url') as HTMLInputElement).value.trim();
+
+    if (!title) { showMessage('イベント名は必須です。', true); return; }
+    if (!performers) { showMessage('出演者は必須です。', true); return; }
+
+    // 日程の収集
+    const dateRows = document.querySelectorAll('.date-row');
+    if (dateRows.length === 0) { showMessage('日程を1つ以上追加してください。', true); return; }
+
+    const dates: { date: string; slots: { start_time: string; door_time: string }[] }[] = [];
+    for (const row of dateRows) {
+      const dateInput = row.querySelector('.date-input') as HTMLInputElement;
+      if (!dateInput.value) { showMessage('開催日を入力してください。', true); return; }
+
+      const slots: { start_time: string; door_time: string }[] = [];
+      const slotRows = row.querySelectorAll('.slot-row');
+      for (const slotRow of slotRows) {
+        const startTime = (slotRow.querySelector('.start-time') as HTMLInputElement).value;
+        const doorTime = (slotRow.querySelector('.door-time') as HTMLInputElement).value;
+        if (!startTime) { showMessage('開始時間を入力してください。', true); return; }
+        slots.push({ start_time: startTime, door_time: doorTime || startTime });
+      }
+      dates.push({ date: dateInput.value, slots });
+    }
+
+    showMessage('保存中...');
+    const submitBtn = form.querySelector('.btn-submit') as HTMLButtonElement;
+    submitBtn.disabled = true;
+
+    try {
+      // 画像アップロード
+      let imageUrl: string | undefined = undefined;
+      const imageFile = (document.getElementById('event-image') as HTMLInputElement).files?.[0];
+      if (imageFile) {
+        const path = `events/${currentUser.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
+        imageUrl = (await uploadImage(imageFile, path)) || undefined;
+      }
+
+      // イベント更新
+      const updateData: any = {
+        title,
+        subtitle: subtitle || null,
+        performers: performers || null,
+        venue_name: venueName || null,
+        venue_map_url: venueMapUrl || null,
+        description: description || null,
+        ticket_price: ticketPrice,
+        youtube_url: youtubeUrl || null,
+        x_url: xUrl || null,
+        instagram_url: instagramUrl || null,
+        tiktok_url: tiktokUrl || null,
+      };
+      if (imageUrl) updateData.image_url = imageUrl;
+
+      const { error: updateError } = await supabase
+        .from('events')
+        .update(updateData)
+        .eq('id', eventId);
+
+      if (updateError) throw updateError;
+
+      // 既存の日程を削除して再登録（cascadeで時間帯も消える）
+      await supabase.from('event_dates').delete().eq('event_id', eventId);
+
+      for (const d of dates) {
+        const { data: dateRow, error: dateError } = await supabase
+          .from('event_dates')
+          .insert({ event_id: eventId, event_date: d.date })
+          .select('id')
+          .single();
+
+        if (dateError) throw dateError;
+
+        for (const slot of d.slots) {
+          const { error: slotError } = await supabase
+            .from('event_time_slots')
+            .insert({
+              event_date_id: dateRow.id,
+              start_time: slot.start_time,
+              door_time: slot.door_time,
+            });
+          if (slotError) throw slotError;
+        }
+      }
+
+      showMessage('イベントを更新しました。リダイレクト中...');
+      setTimeout(() => { window.location.href = '/manage/events'; }, 800);
+
+    } catch (err: any) {
+      showMessage('エラーが発生しました: ' + (err.message || err), true);
+      submitBtn.disabled = false;
+    }
+  });
+
+  // --- 初期化: データ読み込み ---
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = '/auth/login'; return; }
+
+    const role = user.user_metadata?.role;
+    if (role !== 'organizer' && role !== 'admin') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    currentUser = user;
+
+    // イベント取得
+    const { data: event, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', eventId)
+      .single();
+
+    if (error || !event) {
+      showMessage('イベントが見つかりません。', true);
+      document.getElementById('loading')!.classList.add('hidden');
+      return;
+    }
+
+    // 権限チェック
+    if (event.organizer_id !== user.id && role !== 'admin') {
+      window.location.href = '/manage/events';
+      return;
+    }
+
+    // フォームにデータを設定
+    (document.getElementById('event-title') as HTMLInputElement).value = event.title || '';
+    (document.getElementById('event-subtitle') as HTMLInputElement).value = event.subtitle || '';
+    (document.getElementById('event-performers') as HTMLInputElement).value = event.performers || '';
+    (document.getElementById('venue-name') as HTMLInputElement).value = event.venue_name || '';
+    (document.getElementById('venue-map-url') as HTMLInputElement).value = event.venue_map_url || '';
+    (document.getElementById('event-description') as HTMLTextAreaElement).value = event.description || '';
+    (document.getElementById('youtube-url') as HTMLInputElement).value = event.youtube_url || '';
+    (document.getElementById('x-url') as HTMLInputElement).value = event.x_url || '';
+    (document.getElementById('instagram-url') as HTMLInputElement).value = event.instagram_url || '';
+    (document.getElementById('tiktok-url') as HTMLInputElement).value = event.tiktok_url || '';
+
+    if (event.ticket_price == null) {
+      isFreeCheckbox.checked = true;
+      priceGroup.style.display = 'none';
+    } else {
+      (document.getElementById('ticket-price') as HTMLInputElement).value = String(event.ticket_price);
+    }
+
+    // 現在の画像を表示
+    if (event.image_url) {
+      const currentImage = document.getElementById('current-image')!;
+      currentImage.innerHTML = `<p class="current-image-label">現在の画像:</p><img src="${event.image_url}" alt="現在の画像" />`;
+      currentImage.classList.remove('hidden');
+    }
+
+    // 日程を読み込み
+    const { data: eventDates } = await supabase
+      .from('event_dates')
+      .select('*, event_time_slots(*)')
+      .eq('event_id', eventId)
+      .order('event_date', { ascending: true });
+
+    if (eventDates && eventDates.length > 0) {
+      for (const d of eventDates) {
+        const slots = (d.event_time_slots || []).map((s: any) => ({
+          start_time: s.start_time.slice(0, 5),
+          door_time: s.door_time.slice(0, 5),
+        }));
+        addDateRow(d.event_date, slots);
+      }
+    } else {
+      addDateRow();
+    }
+
+    document.getElementById('loading')!.classList.add('hidden');
+    document.getElementById('event-form')!.classList.remove('hidden');
+  }
+
+  init();
+</script>
+
+<style>
+  .page { max-width: 680px; margin: 0 auto; }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+  .back-link:hover { color: var(--color-primary); }
+
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+
+  .subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .form { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    background: var(--color-surface);
+    box-shadow: var(--shadow);
+  }
+
+  .fieldset legend {
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 0 0.5rem;
+  }
+
+  .field-hint {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 1rem;
+  }
+  .form-group:last-child { margin-bottom: 0; }
+
+  .form-group label { font-size: 0.85rem; font-weight: 500; }
+  .required { color: #ef4444; }
+
+  .form-group input[type="text"],
+  .form-group input[type="url"],
+  .form-group input[type="number"],
+  .form-group input[type="date"],
+  .form-group input[type="time"],
+  .form-group textarea {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+  }
+
+  .form-group input:focus, .form-group textarea:focus {
+    border-color: var(--color-primary);
+  }
+
+  .form-group input[type="file"] { font-size: 0.85rem; }
+
+  .photo-preview img, .current-image img {
+    max-width: 300px;
+    max-height: 200px;
+    border-radius: var(--radius);
+    margin-top: 0.5rem;
+    object-fit: cover;
+  }
+
+  .current-image-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .price-row { flex-direction: row; }
+
+  .date-row {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: #fafafa;
+  }
+
+  .date-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .date-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .btn-remove-date, .btn-remove-slot {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+  }
+  .btn-remove-date:hover, .btn-remove-slot:hover { text-decoration: underline; }
+
+  .slot-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+  }
+
+  .slot-fields {
+    display: flex;
+    gap: 0.75rem;
+    flex: 1;
+  }
+
+  .slot-fields .form-group { margin-bottom: 0; flex: 1; }
+
+  .btn-remove-slot { flex-shrink: 0; margin-bottom: 0.375rem; }
+
+  .btn-add, .btn-add-slot {
+    width: 100%;
+    padding: 0.6rem;
+    background: transparent;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    margin-top: 0.5rem;
+  }
+
+  .btn-add:hover, .btn-add-slot:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .btn-add-slot {
+    border-width: 1px;
+    border-style: dashed;
+    font-size: 0.8rem;
+    padding: 0.4rem;
+  }
+
+  .btn-submit {
+    width: 100%;
+    padding: 0.875rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-submit:hover { background: var(--color-primary-dark); }
+  .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .message {
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+  .message-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+  .message-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .hidden { display: none; }
+
+  @media (max-width: 600px) {
+    .slot-fields { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
