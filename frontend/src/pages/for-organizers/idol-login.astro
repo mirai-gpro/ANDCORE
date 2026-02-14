@@ -75,10 +75,26 @@ const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
     messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
   }
 
-  // ロール検証ヘルパー
-  async function verifyIdolRole() {
-    const { data: { user } } = await supabase.auth.getUser();
-    const role = user?.user_metadata?.role;
+  // Google One Tap callback
+  (window as any).handleGoogleCredential = async (response: { credential: string }) => {
+    showMessage('Googleアカウントで認証中...');
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: response.credential,
+    });
+
+    if (error) {
+      showMessage('Google認証に失敗しました: ' + error.message, true);
+      return;
+    }
+
+    if (!data.session) {
+      showMessage('セッションの取得に失敗しました。もう一度お試しください。', true);
+      return;
+    }
+
+    const role = data.session.user.user_metadata?.role;
     if (role !== 'idol') {
       await supabase.auth.signOut();
       if (role === 'organizer' || role === 'admin') {
@@ -90,23 +106,6 @@ const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
     }
     showMessage('ログインしました。リダイレクト中...');
     window.location.href = '/idol';
-  }
-
-  // Google One Tap callback
-  (window as any).handleGoogleCredential = async (response: { credential: string }) => {
-    showMessage('Googleアカウントで認証中...');
-
-    const { error } = await supabase.auth.signInWithIdToken({
-      provider: 'google',
-      token: response.credential,
-    });
-
-    if (error) {
-      showMessage('Google認証に失敗しました: ' + error.message, true);
-      return;
-    }
-
-    await verifyIdolRole();
   };
 
   // Email/Password login

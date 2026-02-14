@@ -41,7 +41,8 @@ const { title } = Astro.props;
         const navAuth = document.getElementById('nav-auth');
         if (!navLinks || !navAuth) return;
 
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (user) {
           const role = user.user_metadata?.role;

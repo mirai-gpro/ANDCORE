@@ -71,13 +71,15 @@ const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
   (window as any).handleGoogleCredential = async (response: { credential: string }) => {
     showMessage('Googleアカウントで認証中...');
 
-    const { error } = await supabase.auth.signInWithIdToken({
+    const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'google',
       token: response.credential,
     });
 
     if (error) {
       showMessage('Google認証に失敗しました: ' + error.message, true);
+    } else if (!data.session) {
+      showMessage('セッションの取得に失敗しました。もう一度お試しください。', true);
     } else {
       showMessage('ログインしました。リダイレクト中...');
       window.location.href = '/dashboard';

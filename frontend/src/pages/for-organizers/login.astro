@@ -72,22 +72,10 @@ const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
   }
 
   // Google One Tap callback
-  async function verifyOrganizerRole() {
-    const { data: { user } } = await supabase.auth.getUser();
-    const role = user?.user_metadata?.role;
-    if (role !== 'organizer' && role !== 'admin') {
-      await supabase.auth.signOut();
-      showMessage('このGoogleアカウントは運営者として登録されていません。先に新規登録を行ってください。', true);
-      return;
-    }
-    showMessage('ログインしました。リダイレクト中...');
-    window.location.href = '/manage';
-  }
-
   (window as any).handleGoogleCredential = async (response: { credential: string }) => {
     showMessage('Googleアカウントで認証中...');
 
-    const { error } = await supabase.auth.signInWithIdToken({
+    const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'google',
       token: response.credential,
     });
@@ -97,7 +85,19 @@ const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID;
       return;
     }
 
-    await verifyOrganizerRole();
+    if (!data.session) {
+      showMessage('セッションの取得に失敗しました。もう一度お試しください。', true);
+      return;
+    }
+
+    const role = data.session.user.user_metadata?.role;
+    if (role !== 'organizer' && role !== 'admin') {
+      await supabase.auth.signOut();
+      showMessage('このGoogleアカウントは運営者として登録されていません。先に新規登録を行ってください。', true);
+      return;
+    }
+    showMessage('ログインしました。リダイレクト中...');
+    window.location.href = '/manage';
   };
 
   // Email/Password login
