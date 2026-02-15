@@ -65,13 +65,10 @@ export default function Camera() {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
 
-      // 縦長映像を取得するため、height > width で明示的に指定
+      // カメラストリームを取得（モバイルブラウザは横長で返す場合が多い）
+      // 縦長表示は objectFit: cover で、保存時はクロップで対応
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-        },
+        video: { facingMode },
         audio: false,
       });
 
