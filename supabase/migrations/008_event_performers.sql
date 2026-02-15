@@ -5,7 +5,7 @@
 -- =====================================================
 
 -- 1. event_performers: イベント × アイドルグループのジャンクションテーブル
-create table event_performers (
+create table if not exists event_performers (
   id uuid primary key default uuid_generate_v4(),
   event_id uuid not null references events(id) on delete cascade,
   idol_group_id uuid not null references idol_groups(id) on delete cascade,
@@ -15,8 +15,8 @@ create table event_performers (
 );
 
 comment on table event_performers is 'イベントの出演アイドルグループ（多対多）';
-create index idx_event_performers_event on event_performers(event_id, sort_order);
-create index idx_event_performers_group on event_performers(idol_group_id);
+create index if not exists idx_event_performers_event on event_performers(event_id, sort_order);
+create index if not exists idx_event_performers_group on event_performers(idol_group_id);
 
 -- performers カラムのコメントを更新
 comment on column events.performers is '出演者フリー入力テキスト（登録外の出演者用）';
@@ -27,9 +27,11 @@ comment on column events.performers is '出演者フリー入力テキスト（�
 
 alter table event_performers enable row level security;
 
+drop policy if exists "event_performers: 全ユーザーが閲覧可能" on event_performers;
 create policy "event_performers: 全ユーザーが閲覧可能"
   on event_performers for select using (true);
 
+drop policy if exists "event_performers: イベント作成者が作成可能" on event_performers;
 create policy "event_performers: イベント作成者が作成可能"
   on event_performers for insert
   with check (
@@ -40,6 +42,7 @@ create policy "event_performers: イベント作成者が作成可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "event_performers: イベント作成者が更新可能" on event_performers;
 create policy "event_performers: イベント作成者が更新可能"
   on event_performers for update
   using (
@@ -50,6 +53,7 @@ create policy "event_performers: イベント作成者が更新可能"
     or exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "event_performers: イベント作成者が削除可能" on event_performers;
 create policy "event_performers: イベント作成者が削除可能"
   on event_performers for delete
   using (

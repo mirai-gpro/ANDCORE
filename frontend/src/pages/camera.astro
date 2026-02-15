@@ -3,10 +3,6 @@ import Layout from '../layouts/Layout.astro';
 import Camera from '../components/Camera';
 ---
 
-<Layout title="カメラ撮影">
-  <h1 style="font-size: 1.5rem; margin-bottom: 1rem;">カメラ撮影テスト</h1>
-  <p style="color: #6b7280; margin-bottom: 2rem; font-size: 0.9rem;">
-    ブラウザのカメラ機能を使った撮影PoCです。撮影ボタンを押すと3秒のカウントダウン後に撮影します。
-  </p>
+<Layout title="特典会撮影機能デモ">
   <Camera client:only="react" />
 </Layout>
