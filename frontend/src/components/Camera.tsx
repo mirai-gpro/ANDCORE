@@ -65,26 +65,18 @@ export default function Camera() {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
 
-      // 縦長映像を優先的に取得。失敗したらフォールバック
-      let stream: MediaStream;
-      let usedFallback = false;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode,
-            width: { ideal: 1080 },
-            height: { ideal: 1920 },
-          },
-          audio: false,
-        });
-      } catch {
-        // portrait制約が通らないブラウザ → シンプルな制約で再取得
-        usedFallback = true;
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode },
-          audio: false,
-        });
-      }
+      // 最大解像度を要求し、縦横比はブラウザ任せ
+      // Android端末はカメラセンサーが物理的に横長なので、
+      // portrait指定(height>width)するとフレームが来ない場合がある
+      // CSSのobjectFit:coverで縦長クロップ表示する
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode,
+          width: { ideal: 4096 },
+          height: { ideal: 4096 },
+        },
+        audio: false,
+      });
 
       streamRef.current = stream;
       if (videoRef.current) {
@@ -97,7 +89,7 @@ export default function Camera() {
         const vh = video.videoHeight;
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings();
-        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}${usedFallback ? ' | FALLBACK使用' : ''}`);
+        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}`);
         setPhase('waiting');
       }
     } catch (err) {
