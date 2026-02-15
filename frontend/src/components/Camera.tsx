@@ -61,33 +61,47 @@ export default function Camera() {
   const startCamera = useCallback(async () => {
     try {
       setError(null);
+      setDebugInfo('カメラ起動中...');
+
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
       }
 
-      // 解像度制約はブラウザ任せ（Android背面カメラは高解像度指定で真っ黒になる）
-      // 縦長表示はCSSのobjectFit:coverで、保存時はcanvasクロップで対応
+      setDebugInfo('getUserMedia 呼び出し中...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode },
         audio: false,
       });
 
+      const tracks = stream.getVideoTracks();
+      setDebugInfo(`ストリーム取得OK (tracks: ${tracks.length}, state: ${tracks[0]?.readyState})`);
+
       streamRef.current = stream;
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = stream;
+
+        setDebugInfo('video.play() 呼び出し中...');
         await video.play();
 
-        // デバッグ: 実際に取得できた映像の解像度を画面に表示
         const vw = video.videoWidth;
         const vh = video.videoHeight;
-        const track = stream.getVideoTracks()[0];
-        const settings = track.getSettings();
-        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}`);
+        const settings = tracks[0]?.getSettings();
+        setDebugInfo(
+          `映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'})` +
+          ` | Track: ${settings?.width}x${settings?.height}` +
+          ` | facing: ${settings?.facingMode ?? '不明'}` +
+          ` | state: ${tracks[0]?.readyState}`
+        );
         setPhase('waiting');
+      } else {
+        setError('videoRef が null です');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'カメラの起動に失敗しました');
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setError(msg);
+      setDebugInfo(`エラー: ${msg}`);
     }
   }, [facingMode]);
 
@@ -313,6 +327,16 @@ export default function Camera() {
             <button onClick={resetSession} style={S.btnRestart}>もう一度</button>
           </div>
         )}
+
+        {/* エラー表示（ビューファインダー内、必ず見える位置） */}
+        {error && (
+          <div style={S.errorOverlay}>{error}</div>
+        )}
+
+        {/* デバッグ情報（ビューファインダー内下部） */}
+        {debugInfo && (
+          <div style={S.debugOverlay}>{debugInfo}</div>
+        )}
       </div>
 
       {/* コントロール部分 */}
@@ -355,14 +379,7 @@ export default function Camera() {
         </div>
       )}
 
-      {error && <div style={S.error}>{error}</div>}
-
-      {/* デバッグ情報（確認後に削除） */}
-      {debugInfo && (
-        <div style={{ padding: '0.5rem', background: '#222', color: '#0f0', fontSize: '0.7rem', fontFamily: 'monospace' }}>
-          {debugInfo}
-        </div>
-      )}
+      {/* エラー・デバッグはビューファインダー内に表示済み */}
     </div>
   );
 }
@@ -613,13 +630,35 @@ const S: Record<string, React.CSSProperties> = {
     display: 'block',
   },
 
-  error: {
+  // エラー（ビューファインダー内、中央上部に赤帯）
+  errorOverlay: {
+    position: 'absolute',
+    top: '3rem',
+    left: '1rem',
+    right: '1rem',
     padding: '0.75rem',
-    margin: '0.5rem',
-    backgroundColor: '#fef2f2',
-    color: '#dc2626',
-    border: '1px solid #fecaca',
+    background: 'rgba(220,38,38,0.9)',
+    color: '#fff',
     borderRadius: '8px',
-    fontSize: '0.85rem',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    textAlign: 'center' as const,
+    zIndex: 50,
+    wordBreak: 'break-all' as const,
+  },
+
+  // デバッグ（ビューファインダー内、最下部）
+  debugOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: '0.4rem 0.5rem',
+    background: 'rgba(0,0,0,0.7)',
+    color: '#0f0',
+    fontSize: '0.65rem',
+    fontFamily: 'monospace',
+    zIndex: 50,
+    wordBreak: 'break-all' as const,
   },
 };
