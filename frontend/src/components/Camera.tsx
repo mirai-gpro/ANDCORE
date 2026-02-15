@@ -99,11 +99,33 @@ export default function Camera() {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+
+    // ビューファインダーの表示領域（縦長）に合わせてクロップ
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const viewEl = video.parentElement;
+    const displayW = viewEl?.clientWidth ?? vw;
+    const displayH = viewEl?.clientHeight ?? vh;
+    const targetRatio = displayW / displayH; // 縦長フレームのアスペクト比
+
+    let sx = 0, sy = 0, sw = vw, sh = vh;
+    const videoRatio = vw / vh;
+
+    if (videoRatio > targetRatio) {
+      // 映像が横長 → 左右をクロップ
+      sw = Math.round(vh * targetRatio);
+      sx = Math.round((vw - sw) / 2);
+    } else {
+      // 映像が縦長 → 上下をクロップ
+      sh = Math.round(vw / targetRatio);
+      sy = Math.round((vh - sh) / 2);
+    }
+
+    canvas.width = sw;
+    canvas.height = sh;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
     // デモ: スマホに自動保存（ダウンロード）
