@@ -65,12 +65,26 @@ export default function Camera() {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
 
-      // カメラストリームを取得（モバイルブラウザは横長で返す場合が多い）
-      // 縦長表示は objectFit: cover で、保存時はクロップで対応
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-        audio: false,
-      });
+      // 縦長映像を優先的に取得。失敗したらフォールバック
+      let stream: MediaStream;
+      let usedFallback = false;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode,
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+          },
+          audio: false,
+        });
+      } catch {
+        // portrait制約が通らないブラウザ → シンプルな制約で再取得
+        usedFallback = true;
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+          audio: false,
+        });
+      }
 
       streamRef.current = stream;
       if (videoRef.current) {
@@ -83,7 +97,7 @@ export default function Camera() {
         const vh = video.videoHeight;
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings();
-        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}`);
+        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}${usedFallback ? ' | FALLBACK使用' : ''}`);
         setPhase('waiting');
       }
     } catch (err) {
@@ -275,7 +289,7 @@ export default function Camera() {
 
       {/* ビューファインダー（縦長・フルスクリーン） */}
       <div style={S.viewfinder}>
-        <video ref={videoRef} style={S.video} playsInline muted />
+        <video ref={videoRef} style={S.video} autoPlay playsInline muted />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         {/* カメラ未起動 */}
@@ -414,9 +428,12 @@ const S: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   video: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'cover' as const,
   },
 
   // オーバーレイ
