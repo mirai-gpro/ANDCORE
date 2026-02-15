@@ -66,8 +66,8 @@ export default function Camera() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
+          aspectRatio: { ideal: 9 / 16 },
           width: { ideal: 1080 },
-          height: { ideal: 1920 },
         },
         audio: false,
       });
@@ -75,6 +75,10 @@ export default function Camera() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        // デバッグ: 実際に取得できた映像の解像度を確認
+        const vw = videoRef.current.videoWidth;
+        const vh = videoRef.current.videoHeight;
+        console.log(`[Camera] video: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'})`);
         setPhase('waiting');
       }
     } catch (err) {
