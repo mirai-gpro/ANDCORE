@@ -65,16 +65,10 @@ export default function Camera() {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
 
-      // 最大解像度を要求し、縦横比はブラウザ任せ
-      // Android端末はカメラセンサーが物理的に横長なので、
-      // portrait指定(height>width)するとフレームが来ない場合がある
-      // CSSのobjectFit:coverで縦長クロップ表示する
+      // 解像度制約はブラウザ任せ（Android背面カメラは高解像度指定で真っ黒になる）
+      // 縦長表示はCSSのobjectFit:coverで、保存時はcanvasクロップで対応
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 4096 },
-          height: { ideal: 4096 },
-        },
+        video: { facingMode },
         audio: false,
       });
 
