@@ -48,6 +48,7 @@ export default function Camera() {
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [countdown, setCountdown] = useState(0);       // 受付後カウントダウン
+  const [debugInfo, setDebugInfo] = useState('');       // デバッグ用
   const [remaining, setRemaining] = useState(30);       // 撮影残り秒数
   const [slideX, setSlideX] = useState(0);              // 受付スライドの位置
   const [warning, setWarning] = useState<string | null>(null); // 画面警告テキスト
@@ -66,8 +67,8 @@ export default function Camera() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
+          aspectRatio: { ideal: 9 / 16 },
           width: { ideal: 1080 },
-          height: { ideal: 1920 },
         },
         audio: false,
       });
@@ -75,6 +76,12 @@ export default function Camera() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        // デバッグ: 実際に取得できた映像の解像度を画面に表示
+        const vw = videoRef.current.videoWidth;
+        const vh = videoRef.current.videoHeight;
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}`);
         setPhase('waiting');
       }
     } catch (err) {
@@ -99,11 +106,33 @@ export default function Camera() {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+
+    // ビューファインダーの表示領域（縦長）に合わせてクロップ
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const viewEl = video.parentElement;
+    const displayW = viewEl?.clientWidth ?? vw;
+    const displayH = viewEl?.clientHeight ?? vh;
+    const targetRatio = displayW / displayH; // 縦長フレームのアスペクト比
+
+    let sx = 0, sy = 0, sw = vw, sh = vh;
+    const videoRatio = vw / vh;
+
+    if (videoRatio > targetRatio) {
+      // 映像が横長 → 左右をクロップ
+      sw = Math.round(vh * targetRatio);
+      sx = Math.round((vw - sw) / 2);
+    } else {
+      // 映像が縦長 → 上下をクロップ
+      sh = Math.round(vw / targetRatio);
+      sy = Math.round((vh - sh) / 2);
+    }
+
+    canvas.width = sw;
+    canvas.height = sh;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
     // デモ: スマホに自動保存（ダウンロード）
@@ -325,6 +354,13 @@ export default function Camera() {
       )}
 
       {error && <div style={S.error}>{error}</div>}
+
+      {/* デバッグ情報（確認後に削除） */}
+      {debugInfo && (
+        <div style={{ padding: '0.5rem', background: '#222', color: '#0f0', fontSize: '0.7rem', fontFamily: 'monospace' }}>
+          {debugInfo}
+        </div>
+      )}
     </div>
   );
 }
