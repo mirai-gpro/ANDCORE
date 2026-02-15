@@ -68,7 +68,18 @@ export default function Camera() {
         streamRef.current = null;
       }
 
-      setDebugInfo('getUserMedia 呼び出し中...');
+      // 権限状態を事前チェック（対応ブラウザのみ）
+      if (navigator.permissions?.query) {
+        try {
+          const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
+          setDebugInfo(`カメラ権限: ${perm.state} → getUserMedia 呼び出し中...`);
+        } catch {
+          setDebugInfo('getUserMedia 呼び出し中...');
+        }
+      } else {
+        setDebugInfo('getUserMedia 呼び出し中...');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode },
         audio: false,
