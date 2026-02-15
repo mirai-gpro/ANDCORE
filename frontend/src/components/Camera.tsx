@@ -79,11 +79,6 @@ export default function Camera() {
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = stream;
-
-        // メタデータ読み込みを待ってから再生
-        await new Promise<void>((resolve) => {
-          video.onloadedmetadata = () => resolve();
-        });
         await video.play();
 
         // デバッグ: 実際に取得できた映像の解像度を画面に表示
