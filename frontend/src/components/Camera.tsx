@@ -64,14 +64,41 @@ export default function Camera() {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          aspectRatio: { ideal: 9 / 16 },
-          width: { ideal: 1080 },
-        },
-        audio: false,
-      });
+
+      // 縦長映像を取得するため、height > width で明示的に指定
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode,
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+          },
+          audio: false,
+        });
+      } catch {
+        // 縦長指定がサポートされない場合はフォールバック
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+          audio: false,
+        });
+      }
+
+      // 取得したストリームが横長の場合、applyConstraints で縦長に再試行
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      if (settings.width && settings.height && settings.width > settings.height) {
+        try {
+          await track.applyConstraints({
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+            aspectRatio: { ideal: 9 / 16 },
+          });
+        } catch {
+          // applyConstraints 失敗は無視（objectFit: cover でカバー）
+        }
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -79,9 +106,8 @@ export default function Camera() {
         // デバッグ: 実際に取得できた映像の解像度を画面に表示
         const vw = videoRef.current.videoWidth;
         const vh = videoRef.current.videoHeight;
-        const track = stream.getVideoTracks()[0];
-        const settings = track.getSettings();
-        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${settings.width}x${settings.height}`);
+        const updatedSettings = track.getSettings();
+        setDebugInfo(`映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'}) | Track: ${updatedSettings.width}x${updatedSettings.height}`);
         setPhase('waiting');
       }
     } catch (err) {
