@@ -48,7 +48,7 @@ export default function Camera() {
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [countdown, setCountdown] = useState(0);       // 受付後カウントダウン
-  const [debugInfo, setDebugInfo] = useState('');       // デバッグ用
+
   const [remaining, setRemaining] = useState(30);       // 撮影残り秒数
   const [slideX, setSlideX] = useState(0);              // 受付スライドの位置
   const [warning, setWarning] = useState<string | null>(null); // 画面警告テキスト
@@ -61,7 +61,6 @@ export default function Camera() {
   const startCamera = useCallback(async () => {
     try {
       setError(null);
-      setDebugInfo('カメラ起動中...');
 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
@@ -71,7 +70,6 @@ export default function Camera() {
       // セキュアコンテキスト（HTTPS）チェック
       if (!window.isSecureContext) {
         setError(`カメラにはHTTPS接続が必要です (現在: ${location.protocol}//${location.host})`);
-        setDebugInfo(`isSecureContext=false, protocol=${location.protocol}`);
         return;
       }
 
@@ -90,20 +88,23 @@ export default function Camera() {
           // 無視
         }
       }
-      setDebugInfo(`権限: ${permState} | getUserMedia 呼び出し中...`);
 
       // タイムアウト付き getUserMedia（10秒）
       const timeoutMs = 10000;
       const abortCtrl = new AbortController();
 
       // exact で要求し、失敗したら ideal にフォールバック
+      // インカメラには高解像度を要求しない（デジタルズーム防止）
+      const resConstraints = facingMode === 'environment'
+        ? { width: { ideal: 1080 }, height: { ideal: 1920 } }
+        : {};
+
       const getStream = async () => {
         try {
           return await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: { exact: facingMode },
-              width: { ideal: 1080 },
-              height: { ideal: 1920 },
+              ...resConstraints,
             },
             audio: false,
           });
@@ -112,8 +113,7 @@ export default function Camera() {
           return await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: { ideal: facingMode },
-              width: { ideal: 1080 },
-              height: { ideal: 1920 },
+              ...resConstraints,
             },
             audio: false,
           });
@@ -137,25 +137,13 @@ export default function Camera() {
       ]);
 
       const tracks = stream.getVideoTracks();
-      setDebugInfo(`ストリーム取得OK (tracks: ${tracks.length}, state: ${tracks[0]?.readyState})`);
 
       streamRef.current = stream;
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = stream;
 
-        setDebugInfo('video.play() 呼び出し中...');
         await video.play();
-
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-        const settings = tracks[0]?.getSettings();
-        setDebugInfo(
-          `映像: ${vw}x${vh} (${vw > vh ? '横長' : '縦長'})` +
-          ` | Track: ${settings?.width}x${settings?.height}` +
-          ` | facing: ${settings?.facingMode ?? '不明'}` +
-          ` | state: ${tracks[0]?.readyState}`
-        );
         setPhase('waiting');
       } else {
         setError('videoRef が null です');
@@ -163,7 +151,6 @@ export default function Camera() {
     } catch (err) {
       const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       setError(msg);
-      setDebugInfo(`エラー: ${msg}`);
     }
   }, [facingMode]);
 
@@ -374,35 +361,32 @@ export default function Camera() {
           </div>
         )}
 
+        {/* 受付スライドボタン（waiting時・ビューファインダー中央） */}
+        {phase === 'waiting' && (
+          <div style={S.slideCenterOverlay}>
+            <div style={S.slideTrack} ref={slideTrackRef}>
+              <div style={S.slideLabel}>スライドで受付</div>
+              <div
+                style={{ ...S.slideThumb, transform: `translateX(${slideX}px)` }}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                onMouseDown={onMouseDown}
+              >
+                &rsaquo;&rsaquo;
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* エラー表示（ビューファインダー内、必ず見える位置） */}
         {error && (
           <div style={S.errorOverlay}>{error}</div>
-        )}
-
-        {/* デバッグ情報（ビューファインダー内下部） */}
-        {debugInfo && (
-          <div style={S.debugOverlay}>{debugInfo}</div>
         )}
       </div>
 
       {/* コントロール部分 */}
       <div style={S.controlArea}>
-        {/* 受付スライドボタン（waiting時のみ） */}
-        {phase === 'waiting' && (
-          <div style={S.slideTrack} ref={slideTrackRef}>
-            <div style={S.slideLabel}>スライドで受付</div>
-            <div
-              style={{ ...S.slideThumb, transform: `translateX(${slideX}px)` }}
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
-              onMouseDown={onMouseDown}
-            >
-              &rsaquo;&rsaquo;
-            </div>
-          </div>
-        )}
-
         {/* シャッターボタン（shooting時のみ） */}
         {phase === 'shooting' && (
           <button onClick={capturePhoto} style={S.captureBtn}>
@@ -576,8 +560,18 @@ const S: Record<string, React.CSSProperties> = {
     background: '#111',
   },
 
-  // スライド受付ボタン
+  // スライド受付ボタン（画面中央オーバーレイ）
+  slideCenterOverlay: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+    pointerEvents: 'none',
+  },
   slideTrack: {
+    pointerEvents: 'auto' as const,
     position: 'relative',
     width: '280px',
     height: '56px',
@@ -689,21 +683,6 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.8rem',
     fontWeight: '600',
     textAlign: 'center' as const,
-    zIndex: 50,
-    wordBreak: 'break-all' as const,
-  },
-
-  // デバッグ（ビューファインダー内、最下部）
-  debugOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: '0.4rem 0.5rem',
-    background: 'rgba(0,0,0,0.7)',
-    color: '#0f0',
-    fontSize: '0.65rem',
-    fontFamily: 'monospace',
     zIndex: 50,
     wordBreak: 'break-all' as const,
   },
