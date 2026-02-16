@@ -95,15 +95,33 @@ export default function Camera() {
       // タイムアウト付き getUserMedia（10秒）
       const timeoutMs = 10000;
       const abortCtrl = new AbortController();
+
+      // exact で要求し、失敗したら ideal にフォールバック
+      const getStream = async () => {
+        try {
+          return await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { exact: facingMode },
+              width: { ideal: 1080 },
+              height: { ideal: 1920 },
+            },
+            audio: false,
+          });
+        } catch {
+          // exact が失敗（該当カメラなし等）→ ideal で再試行
+          return await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 1080 },
+              height: { ideal: 1920 },
+            },
+            audio: false,
+          });
+        }
+      };
+
       const stream = await Promise.race([
-        navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode,
-            width: { ideal: 1080 },
-            height: { ideal: 1920 },
-          },
-          audio: false,
-        }),
+        getStream(),
         new Promise<never>((_, reject) => {
           const id = setTimeout(() => {
             abortCtrl.abort();
@@ -156,10 +174,10 @@ export default function Camera() {
 
   // facingMode 変更時にカメラ再起動
   useEffect(() => {
-    if (phase === 'waiting') {
+    if (phase !== 'idle') {
       startCamera();
     }
-  }, [facingMode]);
+  }, [facingMode, startCamera]);
 
   // --- 撮影 ---
   const capturePhoto = useCallback(() => {
@@ -167,32 +185,16 @@ export default function Camera() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // ビューファインダーの表示領域（縦長）に合わせてクロップ
+    // カメラ映像の全フレームをそのまま保存（object-fit: cover の
+    // クロップはCSSの見た目だけなので、保存時は全体を使う）
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const viewEl = video.parentElement;
-    const displayW = viewEl?.clientWidth ?? vw;
-    const displayH = viewEl?.clientHeight ?? vh;
-    const targetRatio = displayW / displayH; // 縦長フレームのアスペクト比
 
-    let sx = 0, sy = 0, sw = vw, sh = vh;
-    const videoRatio = vw / vh;
-
-    if (videoRatio > targetRatio) {
-      // 映像が横長 → 左右をクロップ
-      sw = Math.round(vh * targetRatio);
-      sx = Math.round((vw - sw) / 2);
-    } else {
-      // 映像が縦長 → 上下をクロップ
-      sh = Math.round(vw / targetRatio);
-      sy = Math.round((vh - sh) / 2);
-    }
-
-    canvas.width = sw;
-    canvas.height = sh;
+    canvas.width = vw;
+    canvas.height = vh;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    ctx.drawImage(video, 0, 0, vw, vh);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
     // デモ: スマホに自動保存（ダウンロード）
@@ -480,7 +482,7 @@ const S: Record<string, React.CSSProperties> = {
     left: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'contain' as const,
+    objectFit: 'cover' as const,
   },
 
   // オーバーレイ
