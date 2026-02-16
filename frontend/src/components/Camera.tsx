@@ -68,22 +68,51 @@ export default function Camera() {
         streamRef.current = null;
       }
 
+      // セキュアコンテキスト（HTTPS）チェック
+      if (!window.isSecureContext) {
+        setError(`カメラにはHTTPS接続が必要です (現在: ${location.protocol}//${location.host})`);
+        setDebugInfo(`isSecureContext=false, protocol=${location.protocol}`);
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('このブラウザは getUserMedia に対応していません');
+        return;
+      }
+
       // 権限状態を事前チェック（対応ブラウザのみ）
+      let permState = '不明';
       if (navigator.permissions?.query) {
         try {
           const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
-          setDebugInfo(`カメラ権限: ${perm.state} → getUserMedia 呼び出し中...`);
+          permState = perm.state;
         } catch {
-          setDebugInfo('getUserMedia 呼び出し中...');
+          // 無視
         }
-      } else {
-        setDebugInfo('getUserMedia 呼び出し中...');
       }
+      setDebugInfo(`権限: ${permState} | getUserMedia 呼び出し中...`);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-        audio: false,
-      });
+      // タイムアウト付き getUserMedia（10秒）
+      const timeoutMs = 10000;
+      const abortCtrl = new AbortController();
+      const stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+          audio: false,
+        }),
+        new Promise<never>((_, reject) => {
+          const id = setTimeout(() => {
+            abortCtrl.abort();
+            reject(new Error(
+              `getUserMedia が ${timeoutMs / 1000} 秒以内に応答しませんでした。` +
+              `\n権限状態: ${permState}` +
+              `\nブラウザのアドレスバーにカメラ許可ダイアログが表示されていませんか？` +
+              `\n→ 許可をタップしてください`
+            ));
+          }, timeoutMs);
+          abortCtrl.signal.addEventListener('abort', () => clearTimeout(id));
+        }),
+      ]);
 
       const tracks = stream.getVideoTracks();
       setDebugInfo(`ストリーム取得OK (tracks: ${tracks.length}, state: ${tracks[0]?.readyState})`);
