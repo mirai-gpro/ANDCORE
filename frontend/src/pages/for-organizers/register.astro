@@ -104,6 +104,12 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
+    // profiles テーブルのロールも直接更新（RLSトリガーのバックアップ）
+    await supabase
+      .from('profiles')
+      .update({ role: 'organizer' })
+      .eq('id', data.user!.id);
+
     showMessage('登録が完了しました。リダイレクト中...');
     window.location.href = '/manage';
   }
