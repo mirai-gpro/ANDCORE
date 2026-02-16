@@ -104,11 +104,16 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
-    // profiles テーブルのロールも直接更新（RLSトリガーのバックアップ）
+    // profiles テーブルのロールを確実に設定（存在しなければ作成）
+    const user = data.user!;
     await supabase
       .from('profiles')
-      .update({ role: 'organizer' })
-      .eq('id', data.user!.id);
+      .upsert({
+        id: user.id,
+        role: 'organizer',
+        nickname: user.user_metadata?.full_name || user.user_metadata?.name || null,
+        avatar_url: user.user_metadata?.avatar_url || null,
+      }, { onConflict: 'id' });
 
     showMessage('登録が完了しました。リダイレクト中...');
     window.location.href = '/manage';
