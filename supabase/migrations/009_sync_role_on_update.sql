@@ -196,6 +196,28 @@ create policy "profiles: 自分のプロフィールを作成可能"
   with check (id = auth.uid());
 
 -- ─────────────────────────────────────────────────────
+-- 10. RPC: プロフィール存在保証 & ロール設定
+-- SECURITY DEFINER で RLS を完全にバイパス
+-- フロントエンドから supabase.rpc('ensure_profile') で呼ぶ
+-- ─────────────────────────────────────────────────────
+create or replace function ensure_profile(
+  target_role text,
+  target_nickname text default null,
+  target_avatar_url text default null
+)
+returns void as $$
+begin
+  insert into profiles (id, role, nickname, avatar_url)
+  values (auth.uid(), target_role, target_nickname, target_avatar_url)
+  on conflict (id)
+  do update set
+    role = EXCLUDED.role,
+    nickname = coalesce(EXCLUDED.nickname, profiles.nickname),
+    avatar_url = coalesce(EXCLUDED.avatar_url, profiles.avatar_url);
+end;
+$$ language plpgsql security definer;
+
+-- ─────────────────────────────────────────────────────
 -- 10. 既存ユーザーの profiles.role を一括修正
 -- ─────────────────────────────────────────────────────
 update profiles p
