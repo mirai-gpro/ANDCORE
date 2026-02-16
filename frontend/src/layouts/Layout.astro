@@ -27,6 +27,13 @@ const { title } = Astro.props;
         <div id="nav-links" class="nav-links">
           <a href="/events">イベント</a>
           <a href="/for-organizers" class="nav-biz">運営者様ページ</a>
+          <div id="nav-mypage" class="nav-mypage" style="display:none;">
+            <button id="nav-mypage-btn" class="nav-mypage-btn">マイページ</button>
+            <div id="nav-mypage-dropdown" class="nav-mypage-dropdown">
+              <a href="/dashboard" id="nav-mypage-link">マイページ</a>
+              <button id="logout-btn-header" class="nav-logout-btn">ログアウト</button>
+            </div>
+          </div>
           <a href="/auth/login" id="nav-auth">ログイン</a>
         </div>
       </nav>
@@ -42,8 +49,13 @@ const { title } = Astro.props;
 
       async function updateNav() {
         const navLinks = document.getElementById('nav-links');
-        const navAuth = document.getElementById('nav-auth');
+        const navAuth = document.getElementById('nav-auth') as HTMLElement | null;
         const navBiz = document.querySelector('.nav-biz') as HTMLElement | null;
+        const navMypage = document.getElementById('nav-mypage') as HTMLElement | null;
+        const navMypageBtn = document.getElementById('nav-mypage-btn');
+        const navMypageDropdown = document.getElementById('nav-mypage-dropdown');
+        const navMypageLink = document.getElementById('nav-mypage-link') as HTMLAnchorElement | null;
+        const logoutBtn = document.getElementById('logout-btn-header');
         if (!navLinks || !navAuth) return;
 
         const { data: { session } } = await supabase.auth.getSession();
@@ -51,8 +63,17 @@ const { title } = Astro.props;
 
         if (user) {
           const role = user.user_metadata?.role;
-          navAuth.textContent = 'マイページ';
-          navAuth.setAttribute('href', '/dashboard');
+
+          // ログインリンクを非表示にし、マイページドロップダウンを表示
+          navAuth.style.display = 'none';
+          if (navMypage) navMypage.style.display = '';
+
+          // ロール別にマイページのリンク先を設定
+          let dashboardHref = '/dashboard';
+          if (role === 'idol') dashboardHref = '/idol';
+          else if (role === 'organizer') dashboardHref = '/manage';
+          else if (role === 'admin') dashboardHref = '/dashboard';
+          if (navMypageLink) navMypageLink.href = dashboardHref;
 
           // ログイン後は「運営者様ページ」を非表示にする
           if (navBiz) navBiz.style.display = 'none';
@@ -64,13 +85,13 @@ const { title } = Astro.props;
             const link = document.createElement('a');
             link.href = '/idol';
             link.textContent = 'ポータル';
-            navLinks.insertBefore(link, navAuth);
+            navLinks.insertBefore(link, navMypage);
           } else if (role === 'organizer') {
             // 運営者: イベント | 運営管理 | マイページ
             const link = document.createElement('a');
             link.href = '/manage';
             link.textContent = '運営管理';
-            navLinks.insertBefore(link, navAuth);
+            navLinks.insertBefore(link, navMypage);
           } else if (role === 'admin') {
             // 管理者: イベント | 運営管理 | ANDCORE管理 | マイページ
             const manageLink = document.createElement('a');
@@ -79,9 +100,26 @@ const { title } = Astro.props;
             const adminLink = document.createElement('a');
             adminLink.href = '/admin';
             adminLink.textContent = 'ANDCORE管理';
-            navLinks.insertBefore(manageLink, navAuth);
-            navLinks.insertBefore(adminLink, navAuth);
+            navLinks.insertBefore(manageLink, navMypage);
+            navLinks.insertBefore(adminLink, navMypage);
           }
+
+          // ドロップダウン開閉
+          navMypageBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navMypageDropdown?.classList.toggle('open');
+          });
+
+          // 外側クリックで閉じる
+          document.addEventListener('click', () => {
+            navMypageDropdown?.classList.remove('open');
+          });
+
+          // ログアウト
+          logoutBtn?.addEventListener('click', async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/';
+          });
         }
       }
 
@@ -178,6 +216,74 @@ const { title } = Astro.props;
   .nav-biz:hover {
     background: var(--color-primary);
     color: white;
+  }
+
+  .nav-mypage {
+    position: relative;
+  }
+
+  .nav-mypage-btn {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+  }
+
+  .nav-mypage-btn:hover {
+    color: var(--color-primary-dark);
+  }
+
+  .nav-mypage-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 150px;
+    z-index: 200;
+    overflow: hidden;
+  }
+
+  .nav-mypage-dropdown.open {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nav-mypage-dropdown a,
+  .nav-mypage-dropdown button {
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .nav-mypage-dropdown a {
+    color: var(--color-text);
+    display: block;
+  }
+
+  .nav-mypage-dropdown a:hover {
+    background: #f3f4f6;
+  }
+
+  .nav-logout-btn {
+    background: none;
+    border: none;
+    border-top: 1px solid var(--color-border);
+    color: #ef4444;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+  }
+
+  .nav-logout-btn:hover {
+    background: #fef2f2;
   }
 
   .main {
