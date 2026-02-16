@@ -61,7 +61,7 @@ const { id } = Astro.params;
 
   <!-- 削除確認モーダル -->
   <div id="delete-modal" class="modal hidden">
-    <div class="modal-backdrop"></div>
+    <div id="modal-backdrop" class="modal-backdrop"></div>
     <div class="modal-content">
       <h3>グループを削除しますか？</h3>
       <p>この操作は取り消せません。全メンバーのデータも削除されます。</p>
@@ -512,6 +512,9 @@ const { id } = Astro.params;
   .modal {
     position: fixed; inset: 0; z-index: 1000;
     display: flex; align-items: center; justify-content: center;
+  }
+  .modal.hidden {
+    display: none;
   }
   .modal-backdrop {
     position: absolute; inset: 0; background: rgba(0,0,0,0.4);
