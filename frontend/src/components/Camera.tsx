@@ -267,6 +267,7 @@ export default function Camera() {
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging.current) return;
+    e.preventDefault(); // iOS: スクロールを抑止してドラッグを有効化
     const x = Math.max(0, Math.min(e.touches[0].clientX - startTouchX.current, trackWidth()));
     setSlideX(x);
   }, []);
@@ -602,6 +603,7 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     background: '#fff',
     display: 'flex',
+    touchAction: 'none',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '1.25rem',
