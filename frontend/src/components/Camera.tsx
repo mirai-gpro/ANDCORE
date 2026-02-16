@@ -97,7 +97,11 @@ export default function Camera() {
       const abortCtrl = new AbortController();
       const stream = await Promise.race([
         navigator.mediaDevices.getUserMedia({
-          video: { facingMode },
+          video: {
+            facingMode,
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+          },
           audio: false,
         }),
         new Promise<never>((_, reject) => {
@@ -476,7 +480,7 @@ const S: Record<string, React.CSSProperties> = {
     left: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'cover' as const,
+    objectFit: 'contain' as const,
   },
 
   // オーバーレイ
