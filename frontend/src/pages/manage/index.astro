@@ -72,13 +72,28 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
-    // イベント数を取得
-    const { count: eventCount } = await supabase
-      .from('events')
-      .select('*', { count: 'exact', head: true })
-      .eq('organizer_id', user.id);
+    // イベント数・所属アイドル数を並行取得
+    const [eventsRes, idolsRes] = await Promise.all([
+      supabase
+        .from('events')
+        .select('*', { count: 'exact', head: true })
+        .eq('organizer_id', user.id),
+      supabase
+        .from('idol_groups')
+        .select('id, idol_members(id)', { count: 'exact' })
+        .eq('organizer_id', user.id),
+    ]);
 
-    document.getElementById('event-count')!.textContent = String(eventCount ?? 0);
+    document.getElementById('event-count')!.textContent = String(eventsRes.count ?? 0);
+
+    // 所属アイドル数 = 全グループのメンバー合計
+    let totalMembers = 0;
+    if (idolsRes.data) {
+      for (const group of idolsRes.data) {
+        totalMembers += (group.idol_members as any[])?.length ?? 0;
+      }
+    }
+    document.getElementById('idol-count')!.textContent = String(totalMembers);
 
     document.getElementById('manage-loading')!.classList.add('hidden');
     document.getElementById('manage-content')!.classList.remove('hidden');

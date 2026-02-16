@@ -1,0 +1,337 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="チケット管理">
+  <div id="tickets-loading" class="loading">読み込み中...</div>
+  <div id="tickets-content" class="page hidden">
+    <a href="/manage" class="back-link">&larr; 運営管理に戻る</a>
+    <div class="page-header">
+      <h1>チケット管理</h1>
+      <p class="subtitle">イベントごとのチケット販売状況</p>
+    </div>
+
+    <div id="events-list" class="events-list">
+      <p class="empty-state">イベントがありません</p>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../../lib/supabase';
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
+    const role = user.user_metadata?.role;
+    if (role !== 'organizer' && role !== 'admin') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    // イベント一覧を取得
+    const { data: events } = await supabase
+      .from('events')
+      .select('id, title, subtitle, status, ticket_price, created_at')
+      .eq('organizer_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (!events || events.length === 0) {
+      document.getElementById('tickets-loading')!.classList.add('hidden');
+      document.getElementById('tickets-content')!.classList.remove('hidden');
+      return;
+    }
+
+    // 各イベントの日程を取得
+    const eventIds = events.map(e => e.id);
+    const { data: allDates } = await supabase
+      .from('event_dates')
+      .select('event_id, event_date')
+      .in('event_id', eventIds)
+      .order('event_date', { ascending: true });
+
+    // 各イベントのチケット商品と販売数を取得
+    const { data: ticketProducts } = await supabase
+      .from('ticket_products')
+      .select('id, event_id, title, price_points, stock_limit')
+      .in('event_id', eventIds);
+
+    // チケット商品がある場合、販売済みチケット数を取得
+    let ticketSales: Record<string, { valid: number; used: number; total: number }> = {};
+    if (ticketProducts && ticketProducts.length > 0) {
+      const productIds = ticketProducts.map(p => p.id);
+      const { data: userTickets } = await supabase
+        .from('user_tickets')
+        .select('ticket_product_id, status')
+        .in('ticket_product_id', productIds);
+
+      if (userTickets) {
+        for (const t of userTickets) {
+          if (!ticketSales[t.ticket_product_id]) {
+            ticketSales[t.ticket_product_id] = { valid: 0, used: 0, total: 0 };
+          }
+          ticketSales[t.ticket_product_id].total++;
+          if (t.status === 'valid') ticketSales[t.ticket_product_id].valid++;
+          if (t.status === 'used') ticketSales[t.ticket_product_id].used++;
+        }
+      }
+    }
+
+    // 日程マップ
+    const dateMap: Record<string, string[]> = {};
+    if (allDates) {
+      for (const d of allDates) {
+        if (!dateMap[d.event_id]) dateMap[d.event_id] = [];
+        dateMap[d.event_id].push(d.event_date);
+      }
+    }
+
+    // チケット商品マップ
+    const productMap: Record<string, typeof ticketProducts> = {};
+    if (ticketProducts) {
+      for (const p of ticketProducts) {
+        if (!productMap[p.event_id]) productMap[p.event_id] = [];
+        productMap[p.event_id].push(p);
+      }
+    }
+
+    const statusLabels: Record<string, string> = {
+      scheduled: '開催前',
+      active: '開催中',
+      completed: '開催済',
+      cancelled: 'キャンセル',
+    };
+    const statusClasses: Record<string, string> = {
+      scheduled: 'badge-scheduled',
+      active: 'badge-active',
+      completed: 'badge-completed',
+      cancelled: 'badge-cancelled',
+    };
+
+    const container = document.getElementById('events-list')!;
+    container.innerHTML = events.map(event => {
+      const dates = dateMap[event.id] || [];
+      const dateStr = dates.length > 0
+        ? dates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })).join(', ')
+        : '日程未設定';
+
+      const products = productMap[event.id] || [];
+      const priceDisplay = event.ticket_price == null ? '無料' : `${event.ticket_price.toLocaleString()}円`;
+
+      let salesHtml = '';
+      if (products.length > 0) {
+        salesHtml = `
+          <div class="ticket-products">
+            <p class="products-label">特典券商品</p>
+            ${products.map(p => {
+              const sales = ticketSales[p.id] || { valid: 0, used: 0, total: 0 };
+              const stockStr = p.stock_limit != null ? `/ ${p.stock_limit}枚` : '';
+              return `
+                <div class="product-row">
+                  <span class="product-name">${p.title || '特典券'}</span>
+                  <span class="product-price">${p.price_points} pt</span>
+                  <span class="product-sales">販売: ${sales.total}枚${stockStr}</span>
+                  <span class="product-status">未使用: ${sales.valid} / 使用済: ${sales.used}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        salesHtml = '<p class="no-products">特典券商品は未設定</p>';
+      }
+
+      // 入場チケット販売状況（将来のuser_tickets連携用）
+      const ticketStatusHtml = event.ticket_price != null
+        ? `<div class="entry-ticket"><span class="entry-label">入場チケット:</span> <span class="entry-price">${priceDisplay}</span></div>`
+        : `<div class="entry-ticket"><span class="entry-label">入場:</span> <span class="entry-free">無料</span></div>`;
+
+      return `
+        <div class="event-card">
+          <div class="event-header">
+            <div class="event-info">
+              <h3>${event.title}</h3>
+              ${event.subtitle ? `<p class="event-subtitle">${event.subtitle}</p>` : ''}
+              <p class="event-date">${dateStr}</p>
+            </div>
+            <span class="badge ${statusClasses[event.status] || ''}">${statusLabels[event.status] || event.status}</span>
+          </div>
+          ${ticketStatusHtml}
+          ${salesHtml}
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('tickets-loading')!.classList.add('hidden');
+    document.getElementById('tickets-content')!.classList.remove('hidden');
+  }
+
+  init();
+</script>
+
+<style>
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .hidden { display: none; }
+
+  .page { max-width: 800px; margin: 0 auto; }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+  .back-link:hover { color: var(--color-primary); }
+
+  .page-header { margin-bottom: 2rem; }
+  .page-header h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+
+  .events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .event-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+  }
+
+  .event-info h3 {
+    font-size: 1rem;
+    margin-bottom: 0.125rem;
+  }
+
+  .event-subtitle {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+  }
+
+  .event-date {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-top: 0.25rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .badge-scheduled { background: #dbeafe; color: #1d4ed8; }
+  .badge-active { background: #dcfce7; color: #16a34a; }
+  .badge-completed { background: #f3f4f6; color: #6b7280; }
+  .badge-cancelled { background: #fef2f2; color: #dc2626; }
+
+  .entry-ticket {
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: #f9fafb;
+    border-radius: var(--radius);
+  }
+
+  .entry-label {
+    font-weight: 500;
+  }
+
+  .entry-price {
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  .entry-free {
+    font-weight: 600;
+    color: #16a34a;
+  }
+
+  .ticket-products {
+    border-top: 1px solid var(--color-border);
+    padding-top: 0.75rem;
+  }
+
+  .products-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--color-text-muted);
+  }
+
+  .product-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: #f9fafb;
+    border-radius: var(--radius);
+    margin-bottom: 0.375rem;
+    font-size: 0.8rem;
+  }
+
+  .product-name {
+    font-weight: 600;
+    min-width: 100px;
+  }
+
+  .product-price {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .product-sales {
+    color: var(--color-text-muted);
+  }
+
+  .product-status {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+  }
+
+  .no-products {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    padding: 3rem;
+  }
+
+  @media (max-width: 600px) {
+    .product-row {
+      flex-direction: column;
+      gap: 0.25rem;
+      align-items: flex-start;
+    }
+  }
+</style>

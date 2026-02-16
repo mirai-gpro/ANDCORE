@@ -43,6 +43,7 @@ const { title } = Astro.props;
       async function updateNav() {
         const navLinks = document.getElementById('nav-links');
         const navAuth = document.getElementById('nav-auth');
+        const navBiz = document.querySelector('.nav-biz') as HTMLElement | null;
         if (!navLinks || !navAuth) return;
 
         const { data: { session } } = await supabase.auth.getSession();
@@ -53,17 +54,25 @@ const { title } = Astro.props;
           navAuth.textContent = 'マイページ';
           navAuth.setAttribute('href', '/dashboard');
 
-          if (role === 'idol') {
+          // ログイン後は「運営者様ページ」を非表示にする
+          if (navBiz) navBiz.style.display = 'none';
+
+          if (role === 'fan') {
+            // ファン: イベント | マイページ
+          } else if (role === 'idol') {
+            // アイドル: イベント | ポータル | マイページ
             const link = document.createElement('a');
             link.href = '/idol';
             link.textContent = 'ポータル';
             navLinks.insertBefore(link, navAuth);
           } else if (role === 'organizer') {
+            // 運営者: イベント | 運営管理 | マイページ
             const link = document.createElement('a');
             link.href = '/manage';
             link.textContent = '運営管理';
             navLinks.insertBefore(link, navAuth);
           } else if (role === 'admin') {
+            // 管理者: イベント | 運営管理 | ANDCORE管理 | マイページ
             const manageLink = document.createElement('a');
             manageLink.href = '/manage';
             manageLink.textContent = '運営管理';
