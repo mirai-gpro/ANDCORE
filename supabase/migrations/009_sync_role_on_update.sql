@@ -141,13 +141,14 @@ create policy "event_dates: organizer/adminが作成可能"
 
 -- event_time_slots
 drop policy if exists "event_time_slots: organizer/adminが作成可能" on event_time_slots;
+drop policy if exists "event_time_slots: イベント作成者が作成可能" on event_time_slots;
 create policy "event_time_slots: organizer/adminが作成可能"
   on event_time_slots for insert
   with check (
     exists (
       select 1 from event_dates ed
       join events e on e.id = ed.event_id
-      where ed.id = date_id and e.organizer_id = auth.uid()
+      where ed.id = event_date_id and e.organizer_id = auth.uid()
     )
     or user_has_role(array['admin'])
   );
