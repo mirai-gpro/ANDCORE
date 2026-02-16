@@ -412,6 +412,12 @@ import Layout from '../../../layouts/Layout.astro';
 
     currentUser = user;
 
+    await supabase.rpc('ensure_profile', {
+      target_role: role,
+      target_nickname: user.user_metadata?.full_name || user.user_metadata?.name || null,
+      target_avatar_url: user.user_metadata?.avatar_url || null,
+    });
+
     // イベント取得
     const { data: event, error } = await supabase
       .from('events')
