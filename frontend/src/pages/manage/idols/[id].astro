@@ -112,6 +112,12 @@ const { id } = Astro.params;
     }
     currentUser = user;
 
+    await supabase.rpc('ensure_profile', {
+      target_role: role,
+      target_nickname: user.user_metadata?.full_name || user.user_metadata?.name || null,
+      target_avatar_url: user.user_metadata?.avatar_url || null,
+    });
+
     // グループ情報取得
     const { data: group, error } = await supabase
       .from('idol_groups')

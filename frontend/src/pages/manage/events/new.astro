@@ -463,6 +463,13 @@ import Layout from '../../../layouts/Layout.astro';
 
     currentUser = user;
 
+    // profiles が確実に存在するよう保証
+    await supabase.rpc('ensure_profile', {
+      target_role: role,
+      target_nickname: user.user_metadata?.full_name || user.user_metadata?.name || null,
+      target_avatar_url: user.user_metadata?.avatar_url || null,
+    });
+
     if (copyFromId) {
       await loadCopyData(copyFromId);
     } else {
