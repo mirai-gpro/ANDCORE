@@ -187,7 +187,16 @@ create trigger on_auth_user_updated_sync_role
   execute function sync_profile_role();
 
 -- ─────────────────────────────────────────────────────
--- 9. 既存ユーザーの profiles.role を一括修正
+-- 9. profiles に INSERT ポリシーを追加
+-- handle_new_user トリガーが失敗した場合のフォールバック用
+-- ─────────────────────────────────────────────────────
+drop policy if exists "profiles: 自分のプロフィールを作成可能" on profiles;
+create policy "profiles: 自分のプロフィールを作成可能"
+  on profiles for insert
+  with check (id = auth.uid());
+
+-- ─────────────────────────────────────────────────────
+-- 10. 既存ユーザーの profiles.role を一括修正
 -- ─────────────────────────────────────────────────────
 update profiles p
 set role = u.raw_user_meta_data->>'role'
