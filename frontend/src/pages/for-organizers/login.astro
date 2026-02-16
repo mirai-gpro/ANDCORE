@@ -76,6 +76,13 @@ import Layout from '../../layouts/Layout.astro';
       showMessage('このGoogleアカウントは運営者として登録されていません。先に新規登録を行ってください。', true);
       return;
     }
+
+    // profiles.role が未同期の場合に備えて直接更新
+    await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', data.session.user.id);
+
     showMessage('ログインしました。リダイレクト中...');
     window.location.href = '/manage';
   }
@@ -120,6 +127,14 @@ import Layout from '../../layouts/Layout.astro';
       await supabase.auth.signOut();
       showMessage('このアカウントは運営者アカウントではありません。ファン向けログインをご利用ください。', true);
       return;
+    }
+
+    // profiles.role が未同期の場合に備えて直接更新
+    if (data.user) {
+      await supabase
+        .from('profiles')
+        .update({ role })
+        .eq('id', data.user.id);
     }
 
     showMessage('ログインしました。リダイレクト中...');
