@@ -136,7 +136,7 @@ import Layout from '../../../layouts/Layout.astro';
       </div>
       <div class="member-fields">
         <div class="form-group">
-          <label>アイドル名 <span class="required">*</span></label>
+          <label>メンバー名 <span class="required">*</span></label>
           <input type="text" class="member-name" data-idx="${idx}" required placeholder="メンバーの芸名" />
         </div>
         <div class="form-group">
@@ -216,7 +216,7 @@ import Layout from '../../../layouts/Layout.astro';
 
       const name = nameInput.value.trim();
       if (!name) {
-        showMessage('全メンバーのアイドル名を入力してください。', true);
+        showMessage('全メンバーのメンバー名を入力してください。', true);
         return;
       }
 
