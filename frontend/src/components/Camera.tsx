@@ -259,28 +259,50 @@ export default function Camera() {
 
   // --- 受付スライドのタッチハンドラ ---
   const trackWidth = () => (slideTrackRef.current?.offsetWidth ?? 280) - 56;
+  const slideThumbRef = useRef<HTMLDivElement>(null);
+  const slideXRef = useRef(0); // ネイティブリスナー用に最新値を保持
 
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    isDragging.current = true;
-    startTouchX.current = e.touches[0].clientX - slideX;
-  }, [slideX]);
+  // slideX を ref にも同期
+  useEffect(() => { slideXRef.current = slideX; }, [slideX]);
 
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging.current) return;
-    e.preventDefault(); // iOS: スクロールを抑止してドラッグを有効化
-    const x = Math.max(0, Math.min(e.touches[0].clientX - startTouchX.current, trackWidth()));
-    setSlideX(x);
-  }, []);
+  // ネイティブ touch イベント登録（passive: false で preventDefault 有効化）
+  useEffect(() => {
+    const thumb = slideThumbRef.current;
+    if (!thumb) return;
 
-  const onTouchEnd = useCallback(() => {
-    isDragging.current = false;
-    if (slideX >= trackWidth() * 0.85) {
-      setSlideX(trackWidth());
-      startCountdown();
-    } else {
-      setSlideX(0);
-    }
-  }, [slideX, startCountdown]);
+    const handleTouchStart = (e: TouchEvent) => {
+      isDragging.current = true;
+      startTouchX.current = e.touches[0].clientX - slideXRef.current;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      e.preventDefault();
+      const x = Math.max(0, Math.min(e.touches[0].clientX - startTouchX.current, trackWidth()));
+      setSlideX(x);
+    };
+
+    const handleTouchEnd = () => {
+      isDragging.current = false;
+      const current = slideXRef.current;
+      if (current >= trackWidth() * 0.85) {
+        setSlideX(trackWidth());
+        startCountdown();
+      } else {
+        setSlideX(0);
+      }
+    };
+
+    thumb.addEventListener('touchstart', handleTouchStart, { passive: true });
+    thumb.addEventListener('touchmove', handleTouchMove, { passive: false });
+    thumb.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      thumb.removeEventListener('touchstart', handleTouchStart);
+      thumb.removeEventListener('touchmove', handleTouchMove);
+      thumb.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [startCountdown]);
 
   // マウス対応（PCでもテスト可能に）
   const onMouseDown = useCallback((e: React.MouseEvent) => {
@@ -368,10 +390,8 @@ export default function Camera() {
             <div style={S.slideTrack} ref={slideTrackRef}>
               <div style={S.slideLabel}>スライドで受付</div>
               <div
+                ref={slideThumbRef}
                 style={{ ...S.slideThumb, transform: `translateX(${slideX}px)` }}
-                onTouchStart={onTouchStart}
-                onTouchMove={onTouchMove}
-                onTouchEnd={onTouchEnd}
                 onMouseDown={onMouseDown}
               >
                 &rsaquo;&rsaquo;
