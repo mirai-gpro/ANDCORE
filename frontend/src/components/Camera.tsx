@@ -302,7 +302,7 @@ export default function Camera() {
       thumb.removeEventListener('touchmove', handleTouchMove);
       thumb.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [startCountdown]);
+  }, [startCountdown, phase]);
 
   // マウス対応（PCでもテスト可能に）
   const onMouseDown = useCallback((e: React.MouseEvent) => {
