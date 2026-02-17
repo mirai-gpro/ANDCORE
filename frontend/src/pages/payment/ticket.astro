@@ -58,8 +58,6 @@ import Layout from '../../layouts/Layout.astro';
 <script>
   import { supabase } from '../../lib/supabase';
 
-  const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
-
   const loadingEl = document.getElementById('ticket-loading')!;
   const contentEl = document.getElementById('ticket-content')!;
   const ticketInfoEl = document.getElementById('ticket-info')!;
@@ -153,7 +151,7 @@ import Layout from '../../layouts/Layout.astro';
     purchaseBtn.textContent = '処理中...';
 
     try {
-      const res = await fetch(`${API_BASE}/api/payment/ticket`, {
+      const res = await fetch('/api/payment/ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
