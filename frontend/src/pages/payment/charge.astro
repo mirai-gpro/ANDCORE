@@ -66,8 +66,6 @@ import Layout from '../../layouts/Layout.astro';
 <script>
   import { supabase } from '../../lib/supabase';
 
-  const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
-
   const loadingEl = document.getElementById('charge-loading')!;
   const contentEl = document.getElementById('charge-content')!;
   const confirmEl = document.getElementById('charge-confirm')!;
@@ -185,7 +183,7 @@ import Layout from '../../layouts/Layout.astro';
     confirmBtn.textContent = '処理中...';
 
     try {
-      const res = await fetch(`${API_BASE}/api/payment/charge`, {
+      const res = await fetch('/api/payment/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
