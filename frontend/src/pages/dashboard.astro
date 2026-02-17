@@ -28,6 +28,10 @@ import Layout from '../layouts/Layout.astro';
     <div class="quick-actions">
       <h2>クイックアクション</h2>
       <div class="action-grid">
+        <a href="/payment/charge" class="action-card action-charge">
+          <h3>ポイントチャージ</h3>
+          <p>クレジットカードでポイントを購入</p>
+        </a>
         <a href="/events" class="action-card">
           <h3>イベント一覧</h3>
           <p>開催中のイベントを確認</p>
@@ -165,6 +169,11 @@ import Layout from '../layouts/Layout.astro';
   .action-card:hover {
     border-color: var(--color-primary);
     color: var(--color-text);
+  }
+
+  .action-charge {
+    border-color: var(--color-primary);
+    background: #f5f3ff;
   }
 
   .action-card h3 {

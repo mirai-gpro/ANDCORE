@@ -1,0 +1,375 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="チケット購入">
+  <div id="ticket-loading" class="loading">読み込み中...</div>
+  <div id="ticket-content" class="ticket-page hidden">
+    <div class="page-header">
+      <h1>チケット購入</h1>
+      <p class="page-description">クレジットカードで直接チケットを購入できます。</p>
+    </div>
+
+    <div id="ticket-info" class="ticket-info hidden">
+      <div class="ticket-card">
+        <h2 id="ticket-title"></h2>
+        <p id="ticket-event" class="ticket-event"></p>
+        <div class="ticket-details">
+          <div class="detail-item">
+            <span class="detail-label">価格</span>
+            <span class="detail-value" id="ticket-price"></span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">撮影時間</span>
+            <span class="detail-value" id="ticket-duration"></span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">在庫</span>
+            <span class="detail-value" id="ticket-stock"></span>
+          </div>
+        </div>
+
+        <div class="quantity-section">
+          <label for="quantity">購入枚数</label>
+          <div class="quantity-control">
+            <button id="qty-minus" class="qty-btn">-</button>
+            <input type="number" id="quantity" value="1" min="1" max="10" readonly />
+            <button id="qty-plus" class="qty-btn">+</button>
+          </div>
+        </div>
+
+        <div class="total-section">
+          <span>お支払い合計</span>
+          <strong id="total-amount">-</strong>
+        </div>
+
+        <button id="purchase-btn" class="btn btn-primary">決済ページへ進む</button>
+        <p class="purchase-note">GMOペイメントの決済ページに移動します。</p>
+      </div>
+    </div>
+
+    <div id="no-ticket" class="no-ticket hidden">
+      <p>チケット情報が見つかりません。</p>
+      <a href="/events" class="btn btn-secondary">イベント一覧へ</a>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+
+  const loadingEl = document.getElementById('ticket-loading')!;
+  const contentEl = document.getElementById('ticket-content')!;
+  const ticketInfoEl = document.getElementById('ticket-info')!;
+  const noTicketEl = document.getElementById('no-ticket')!;
+  const quantityInput = document.getElementById('quantity') as HTMLInputElement;
+  const purchaseBtn = document.getElementById('purchase-btn')!;
+
+  let ticketProduct: any = null;
+  let currentUserId = '';
+  let quantity = 1;
+
+  async function init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
+    currentUserId = session.user.id;
+
+    // URLからチケットIDを取得
+    const params = new URLSearchParams(window.location.search);
+    const ticketId = params.get('id');
+
+    loadingEl.classList.add('hidden');
+    contentEl.classList.remove('hidden');
+
+    if (!ticketId) {
+      noTicketEl.classList.remove('hidden');
+      return;
+    }
+
+    // チケット商品情報を取得
+    const { data: product } = await supabase
+      .from('ticket_products')
+      .select('*, events(title)')
+      .eq('id', ticketId)
+      .single();
+
+    if (!product) {
+      noTicketEl.classList.remove('hidden');
+      return;
+    }
+
+    ticketProduct = product;
+
+    // 表示を更新
+    document.getElementById('ticket-title')!.textContent = product.title || 'チケット';
+    document.getElementById('ticket-event')!.textContent = (product as any).events?.title || '';
+    document.getElementById('ticket-price')!.textContent = `${product.price_points.toLocaleString()}円`;
+    document.getElementById('ticket-duration')!.textContent = `${product.duration_seconds}秒`;
+
+    const remaining = product.stock_limit
+      ? product.stock_limit - (product.sold_count || 0)
+      : null;
+    document.getElementById('ticket-stock')!.textContent =
+      remaining !== null ? `残り${remaining}枚` : '在庫あり';
+
+    updateTotal();
+    ticketInfoEl.classList.remove('hidden');
+  }
+
+  function updateTotal() {
+    if (!ticketProduct) return;
+    const total = ticketProduct.price_points * quantity;
+    document.getElementById('total-amount')!.textContent = `${total.toLocaleString()}円（税込）`;
+  }
+
+  // 数量変更
+  document.getElementById('qty-minus')?.addEventListener('click', () => {
+    if (quantity > 1) {
+      quantity--;
+      quantityInput.value = String(quantity);
+      updateTotal();
+    }
+  });
+
+  document.getElementById('qty-plus')?.addEventListener('click', () => {
+    if (quantity < 10) {
+      quantity++;
+      quantityInput.value = String(quantity);
+      updateTotal();
+    }
+  });
+
+  // 購入ボタン
+  purchaseBtn.addEventListener('click', async () => {
+    if (!ticketProduct) return;
+
+    purchaseBtn.setAttribute('disabled', 'true');
+    purchaseBtn.textContent = '処理中...';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/payment/ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          ticket_product_id: ticketProduct.id,
+          quantity,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || '決済の開始に失敗しました');
+      }
+
+      const data = await res.json();
+      window.location.href = data.payment_url;
+    } catch (e: any) {
+      alert(e.message || '決済の開始に失敗しました');
+      purchaseBtn.removeAttribute('disabled');
+      purchaseBtn.textContent = '決済ページへ進む';
+    }
+  });
+
+  init();
+</script>
+
+<style>
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .page-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .page-description {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .ticket-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    max-width: 480px;
+  }
+
+  .ticket-card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .ticket-event {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .ticket-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: var(--radius);
+  }
+
+  .detail-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+  }
+
+  .detail-label {
+    color: var(--color-text-muted);
+  }
+
+  .detail-value {
+    font-weight: 600;
+  }
+
+  .quantity-section {
+    margin-bottom: 1.25rem;
+  }
+
+  .quantity-section label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .quantity-control {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: fit-content;
+  }
+
+  .qty-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+  }
+
+  .qty-btn:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+  }
+
+  .qty-btn:last-child {
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .qty-btn:hover {
+    background: #f3f4f6;
+  }
+
+  .quantity-control input {
+    width: 48px;
+    height: 36px;
+    text-align: center;
+    border: 1px solid var(--color-border);
+    border-left: none;
+    border-right: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: inherit;
+  }
+
+  .total-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f5f3ff;
+    border-radius: var(--radius);
+    margin-bottom: 1.25rem;
+    font-size: 0.95rem;
+  }
+
+  .total-section strong {
+    font-size: 1.15rem;
+    color: var(--color-primary);
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    font-family: inherit;
+    text-decoration: none;
+    text-align: center;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+    width: 100%;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-dark);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .purchase-note {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.75rem;
+  }
+
+  .no-ticket {
+    text-align: center;
+    padding: 3rem;
+  }
+
+  .no-ticket p {
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+  }
+</style>

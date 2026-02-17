@@ -3,6 +3,8 @@ export type EventStatus = 'scheduled' | 'active' | 'completed' | 'cancelled';
 export type TicketStatus = 'valid' | 'used' | 'expired';
 export type MediaType = 'photo' | 'video';
 export type MediaStatus = 'pending_review' | 'published';
+export type PaymentOrderType = 'point_charge' | 'ticket_purchase';
+export type PaymentOrderStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded';
 
 export interface Database {
   public: {
@@ -183,6 +185,35 @@ export interface Database {
         Update: {
           status?: TicketStatus;
           used_at?: string | null;
+        };
+      };
+      payment_orders: {
+        Row: {
+          id: string;
+          user_id: string;
+          order_type: PaymentOrderType;
+          status: PaymentOrderStatus;
+          amount: number;
+          tax: number;
+          points_amount: number | null;
+          ticket_product_id: string | null;
+          ticket_quantity: number | null;
+          gmo_order_id: string;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          user_id: string;
+          order_type: PaymentOrderType;
+          amount: number;
+          gmo_order_id: string;
+          points_amount?: number | null;
+          ticket_product_id?: string | null;
+          ticket_quantity?: number | null;
+        };
+        Update: {
+          status?: PaymentOrderStatus;
+          completed_at?: string | null;
         };
       };
       media_assets: {

@@ -8,7 +8,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, media, upload
+from app.routers import health, media, payment, upload
 
 app = FastAPI(
     title="Encore API",
@@ -29,3 +29,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(upload.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
+app.include_router(payment.router, prefix="/api")

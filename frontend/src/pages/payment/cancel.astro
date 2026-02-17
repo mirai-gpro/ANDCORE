@@ -1,0 +1,102 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="決済キャンセル">
+  <div class="result-page">
+    <div class="result-card cancelled">
+      <div class="result-icon">&#10005;</div>
+      <h1>決済がキャンセルされました</h1>
+      <p class="result-message">決済は完了していません。再度お試しください。</p>
+      <div class="result-actions">
+        <a href="/payment/charge" class="btn btn-primary">ポイントチャージへ戻る</a>
+        <a href="/dashboard" class="btn btn-secondary">マイページへ</a>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .result-page {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+  }
+
+  .result-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2.5rem;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: var(--shadow);
+  }
+
+  .result-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+    font-size: 2rem;
+    font-weight: 700;
+  }
+
+  .cancelled .result-icon {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .result-card h1 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .result-message {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .result-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.5rem;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-dark);
+    color: white;
+  }
+
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+</style>

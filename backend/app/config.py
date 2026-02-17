@@ -17,6 +17,16 @@ class Settings(BaseSettings):
 
     # App
     environment: str = "development"
+    frontend_url: str = "http://localhost:4321"
+
+    # GMOペイメントゲートウェイ（リンクタイプPlus）
+    gmo_shop_id: str = ""
+    gmo_shop_pass: str = ""
+    gmo_config_id: str = ""
+    # テスト環境: https://stg.link.mul-pay.jp  本番: https://link.mul-pay.jp
+    gmo_link_url: str = "https://stg.link.mul-pay.jp"
+    # 結果通知の検証用ハッシュキー（管理画面で設定）
+    gmo_result_hash_key: str = ""
 
     model_config = {"env_file": ".env"}
 

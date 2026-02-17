@@ -1,0 +1,490 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="ポイントチャージ">
+  <div id="charge-loading" class="loading">読み込み中...</div>
+  <div id="charge-content" class="charge hidden">
+    <div class="page-header">
+      <h1>ポイントチャージ</h1>
+      <p class="current-balance">現在の残高: <strong id="current-points">0</strong> pt</p>
+    </div>
+
+    <div class="charge-plans">
+      <h2>チャージプランを選択</h2>
+      <div class="plan-grid">
+        <button class="plan-card" data-points="500" data-amount="550">
+          <span class="plan-points">500 pt</span>
+          <span class="plan-price">550円（税込）</span>
+        </button>
+        <button class="plan-card" data-points="1000" data-amount="1100">
+          <span class="plan-points">1,000 pt</span>
+          <span class="plan-price">1,100円（税込）</span>
+        </button>
+        <button class="plan-card popular" data-points="3000" data-amount="3300">
+          <span class="plan-badge">人気</span>
+          <span class="plan-points">3,000 pt</span>
+          <span class="plan-price">3,300円（税込）</span>
+        </button>
+        <button class="plan-card" data-points="5000" data-amount="5500">
+          <span class="plan-points">5,000 pt</span>
+          <span class="plan-price">5,500円（税込）</span>
+        </button>
+        <button class="plan-card" data-points="10000" data-amount="11000">
+          <span class="plan-points">10,000 pt</span>
+          <span class="plan-price">11,000円（税込）</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="charge-confirm" class="charge-confirm hidden">
+      <div class="confirm-box">
+        <h3>チャージ内容の確認</h3>
+        <dl class="confirm-details">
+          <dt>チャージポイント</dt>
+          <dd id="confirm-points">-</dd>
+          <dt>お支払い金額</dt>
+          <dd id="confirm-amount">-</dd>
+        </dl>
+        <p class="confirm-note">GMOペイメントの決済ページに移動します。</p>
+        <div class="confirm-actions">
+          <button id="confirm-btn" class="btn btn-primary">決済ページへ進む</button>
+          <button id="cancel-btn" class="btn btn-secondary">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="charge-history">
+      <h2>チャージ履歴</h2>
+      <div id="history-list" class="history-list">
+        <p class="empty-state">履歴はありません</p>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+
+  const loadingEl = document.getElementById('charge-loading')!;
+  const contentEl = document.getElementById('charge-content')!;
+  const confirmEl = document.getElementById('charge-confirm')!;
+  const confirmPointsEl = document.getElementById('confirm-points')!;
+  const confirmAmountEl = document.getElementById('confirm-amount')!;
+  const confirmBtn = document.getElementById('confirm-btn')!;
+  const cancelBtn = document.getElementById('cancel-btn')!;
+
+  let selectedPoints = 0;
+  let selectedAmount = 0;
+  let currentUserId = '';
+
+  async function init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
+    currentUserId = session.user.id;
+
+    // ポイント残高を取得
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('points_balance')
+      .eq('id', currentUserId)
+      .single();
+
+    if (profile) {
+      document.getElementById('current-points')!.textContent =
+        profile.points_balance.toLocaleString();
+    }
+
+    // チャージ履歴を取得
+    await loadHistory();
+
+    loadingEl.classList.add('hidden');
+    contentEl.classList.remove('hidden');
+  }
+
+  async function loadHistory() {
+    const { data: orders } = await supabase
+      .from('payment_orders')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .eq('order_type', 'point_charge')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const historyList = document.getElementById('history-list')!;
+
+    if (!orders || orders.length === 0) {
+      historyList.innerHTML = '<p class="empty-state">履歴はありません</p>';
+      return;
+    }
+
+    const statusLabels: Record<string, string> = {
+      pending: '処理待ち',
+      processing: '処理中',
+      completed: '完了',
+      failed: '失敗',
+      cancelled: 'キャンセル',
+      refunded: '返金済み',
+    };
+
+    const statusClasses: Record<string, string> = {
+      completed: 'status-success',
+      failed: 'status-error',
+      cancelled: 'status-cancelled',
+      refunded: 'status-cancelled',
+    };
+
+    historyList.innerHTML = orders
+      .map((order) => {
+        const date = new Date(order.created_at).toLocaleDateString('ja-JP');
+        const statusLabel = statusLabels[order.status] || order.status;
+        const statusClass = statusClasses[order.status] || 'status-pending';
+        return `
+          <div class="history-item">
+            <div class="history-info">
+              <span class="history-points">${(order.points_amount || 0).toLocaleString()} pt</span>
+              <span class="history-date">${date}</span>
+            </div>
+            <div class="history-meta">
+              <span class="history-amount">${order.amount.toLocaleString()}円</span>
+              <span class="history-status ${statusClass}">${statusLabel}</span>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  // プラン選択
+  document.querySelectorAll('.plan-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const el = card as HTMLElement;
+      selectedPoints = parseInt(el.dataset.points || '0');
+      selectedAmount = parseInt(el.dataset.amount || '0');
+
+      // 選択状態を更新
+      document.querySelectorAll('.plan-card').forEach((c) => c.classList.remove('selected'));
+      el.classList.add('selected');
+
+      // 確認表示
+      confirmPointsEl.textContent = `${selectedPoints.toLocaleString()} pt`;
+      confirmAmountEl.textContent = `${selectedAmount.toLocaleString()}円（税込）`;
+      confirmEl.classList.remove('hidden');
+    });
+  });
+
+  // 決済ボタン
+  confirmBtn.addEventListener('click', async () => {
+    confirmBtn.setAttribute('disabled', 'true');
+    confirmBtn.textContent = '処理中...';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/payment/charge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          points_amount: selectedPoints,
+          amount: selectedAmount,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || '決済の開始に失敗しました');
+      }
+
+      const data = await res.json();
+
+      // GMO決済ページへリダイレクト
+      window.location.href = data.payment_url;
+    } catch (e: any) {
+      alert(e.message || '決済の開始に失敗しました');
+      confirmBtn.removeAttribute('disabled');
+      confirmBtn.textContent = '決済ページへ進む';
+    }
+  });
+
+  // キャンセルボタン
+  cancelBtn.addEventListener('click', () => {
+    confirmEl.classList.add('hidden');
+    document.querySelectorAll('.plan-card').forEach((c) => c.classList.remove('selected'));
+    selectedPoints = 0;
+    selectedAmount = 0;
+  });
+
+  init();
+</script>
+
+<style>
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .page-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .current-balance {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+  }
+
+  .current-balance strong {
+    color: var(--color-primary);
+    font-size: 1.2rem;
+  }
+
+  .charge-plans h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .plan-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .plan-card {
+    position: relative;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-family: inherit;
+  }
+
+  .plan-card:hover {
+    border-color: var(--color-primary);
+  }
+
+  .plan-card.selected {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    background: #f5f3ff;
+  }
+
+  .plan-card.popular {
+    border-color: #f59e0b;
+  }
+
+  .plan-badge {
+    position: absolute;
+    top: -0.6rem;
+    right: 0.75rem;
+    background: #f59e0b;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+  }
+
+  .plan-points {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .plan-price {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .charge-confirm {
+    margin-bottom: 2rem;
+  }
+
+  .confirm-box {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+
+  .confirm-box h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .confirm-details {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .confirm-details dt {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+  }
+
+  .confirm-details dd {
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .confirm-note {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: var(--radius);
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.5rem;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+    flex: 1;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-dark);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--color-text-muted);
+  }
+
+  .charge-history {
+    margin-top: 2rem;
+  }
+
+  .charge-history h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+  }
+
+  .history-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .history-points {
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .history-date {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .history-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15rem;
+  }
+
+  .history-amount {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .history-status {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+  }
+
+  .status-success {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .status-error {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .status-cancelled {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .status-pending {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+  }
+</style>
