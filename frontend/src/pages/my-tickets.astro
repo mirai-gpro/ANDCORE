@@ -1,0 +1,79 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="購入済みチケット">
+  <div id="my-tickets-root"></div>
+</Layout>
+
+<script>
+  import { createElement } from 'react';
+  import { createRoot } from 'react-dom/client';
+  import MyTickets from '../components/MyTickets';
+
+  const root = document.getElementById('my-tickets-root');
+  if (root) {
+    createRoot(root).render(createElement(MyTickets));
+  }
+</script>
+
+<style is:global>
+  .my-tickets { max-width: 600px; }
+  .my-tickets h1 { font-size: 1.3rem; margin-bottom: 1.5rem; }
+  .my-tickets h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+
+  .my-tickets .back-btn {
+    background: none; border: none; color: #6366f1; cursor: pointer;
+    font-size: 0.85rem; padding: 0; margin-bottom: 1rem; font-family: inherit;
+  }
+
+  /* Event group */
+  .event-group {
+    background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+    margin-bottom: 0.75rem; overflow: hidden;
+  }
+  .event-group-header {
+    padding: 1rem; cursor: pointer; display: flex; justify-content: space-between;
+    align-items: center; font-weight: 600; font-size: 0.95rem;
+  }
+  .event-group-header:hover { background: #f9fafb; }
+  .event-group-count {
+    font-size: 0.8rem; color: #6b7280; font-weight: normal;
+    background: #f3f4f6; padding: 0.15rem 0.5rem; border-radius: 4px;
+  }
+
+  /* Date/time slot */
+  .slot-group {
+    padding: 0.75rem 1rem; border-top: 1px solid #f3f4f6;
+    cursor: pointer;
+  }
+  .slot-group:hover { background: #f9fafb; }
+  .slot-label { font-size: 0.9rem; font-weight: 600; }
+  .slot-meta { font-size: 0.8rem; color: #6b7280; }
+
+  /* Ticket card */
+  .ticket-grid { display: flex; flex-direction: column; gap: 0.5rem; padding: 0 0 0.75rem; }
+  .ticket-card {
+    display: flex; justify-content: space-between; align-items: center;
+    background: white; border: 2px solid #e5e7eb; border-radius: 8px;
+    padding: 1rem; cursor: pointer; transition: all 0.2s;
+  }
+  .ticket-card:hover:not(.ticket-used) { border-color: #6366f1; }
+  .ticket-card.ticket-used {
+    opacity: 0.5; cursor: default; background: #f9fafb;
+  }
+  .ticket-card-info { display: flex; flex-direction: column; gap: 0.15rem; }
+  .ticket-card-member { font-weight: 700; font-size: 0.95rem; }
+  .ticket-card-type { font-size: 0.8rem; color: #6b7280; }
+  .ticket-badge {
+    font-size: 0.7rem; font-weight: 700; padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+  }
+  .badge-valid { background: #dcfce7; color: #166534; }
+  .badge-used { background: #f3f4f6; color: #6b7280; }
+
+  .empty-msg {
+    text-align: center; padding: 3rem 1rem; color: #6b7280; font-size: 0.9rem;
+  }
+  .empty-msg a { color: #6366f1; font-weight: 600; }
+</style>

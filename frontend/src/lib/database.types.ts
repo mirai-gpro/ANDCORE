@@ -1,10 +1,11 @@
 export type UserRole = 'fan' | 'idol' | 'admin';
 export type EventStatus = 'scheduled' | 'active' | 'completed' | 'cancelled';
-export type TicketStatus = 'valid' | 'used' | 'expired';
+export type TicketStatus = 'valid' | 'used' | 'expired' | 'refunded';
 export type MediaType = 'photo' | 'video';
 export type MediaStatus = 'pending_review' | 'published';
 export type PaymentOrderType = 'point_charge' | 'ticket_purchase';
 export type PaymentOrderStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded';
+export type HoldStatus = 'held' | 'purchased' | 'released' | 'expired';
 
 export interface Database {
   public: {
@@ -142,27 +143,59 @@ export interface Database {
           sort_order?: number;
         };
       };
+      event_slot_members: {
+        Row: {
+          id: string;
+          event_time_slot_id: string;
+          idol_id: string | null;
+          display_name: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          event_time_slot_id: string;
+          idol_id?: string | null;
+          display_name: string;
+          sort_order?: number;
+        };
+        Update: {
+          display_name?: string;
+          sort_order?: number;
+        };
+      };
       ticket_products: {
         Row: {
           id: string;
           event_id: string;
           idol_id: string;
+          event_slot_member_id: string | null;
+          ticket_type: string;
           title: string | null;
+          description: string | null;
+          price: number;
           price_points: number;
           duration_seconds: number;
           stock_limit: number | null;
+          sold_count: number;
           created_at: string;
         };
         Insert: {
           event_id: string;
           idol_id: string;
+          event_slot_member_id?: string | null;
+          ticket_type?: string;
           title?: string | null;
-          price_points: number;
-          duration_seconds: number;
+          description?: string | null;
+          price?: number;
+          price_points?: number;
+          duration_seconds?: number;
           stock_limit?: number | null;
         };
         Update: {
+          ticket_type?: string;
           title?: string | null;
+          description?: string | null;
+          price?: number;
           price_points?: number;
           duration_seconds?: number;
           stock_limit?: number | null;
@@ -173,6 +206,8 @@ export interface Database {
           id: string;
           user_id: string;
           ticket_product_id: string;
+          ticket_hold_id: string | null;
+          payment_order_id: string | null;
           status: TicketStatus;
           used_at: string | null;
           created_at: string;
@@ -180,11 +215,54 @@ export interface Database {
         Insert: {
           user_id: string;
           ticket_product_id: string;
+          ticket_hold_id?: string | null;
+          payment_order_id?: string | null;
           status?: TicketStatus;
         };
         Update: {
           status?: TicketStatus;
           used_at?: string | null;
+        };
+      };
+      ticket_holds: {
+        Row: {
+          id: string;
+          user_id: string;
+          payment_order_id: string | null;
+          status: HoldStatus;
+          total_amount: number;
+          held_at: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          payment_order_id?: string | null;
+          total_amount?: number;
+          expires_at?: string;
+        };
+        Update: {
+          status?: HoldStatus;
+          payment_order_id?: string | null;
+        };
+      };
+      ticket_hold_items: {
+        Row: {
+          id: string;
+          ticket_hold_id: string;
+          ticket_product_id: string;
+          quantity: number;
+          unit_price: number;
+          created_at: string;
+        };
+        Insert: {
+          ticket_hold_id: string;
+          ticket_product_id: string;
+          quantity: number;
+          unit_price: number;
+        };
+        Update: {
+          quantity?: number;
         };
       };
       payment_orders: {

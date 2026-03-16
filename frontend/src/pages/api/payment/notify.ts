@@ -135,17 +135,64 @@ async function processPointCharge(supabase: any, order: any) {
 
 async function processTicketPurchase(supabase: any, order: any) {
   const userId = order.user_id;
+
+  // 仮押さえ経由のチケット購入を処理
+  const { data: holds } = await supabase
+    .from('ticket_holds')
+    .select('*, ticket_hold_items(*)')
+    .eq('payment_order_id', order.id)
+    .eq('status', 'held');
+
+  if (holds && holds.length > 0) {
+    for (const hold of holds) {
+      for (const item of hold.ticket_hold_items || []) {
+        // チケットを枚数分発行
+        const tickets = Array.from({ length: item.quantity }, () => ({
+          user_id: userId,
+          ticket_product_id: item.ticket_product_id,
+          ticket_hold_id: hold.id,
+          payment_order_id: order.id,
+          status: 'valid',
+        }));
+        await supabase.from('user_tickets').insert(tickets);
+
+        // 販売数を更新
+        const { data: product } = await supabase
+          .from('ticket_products')
+          .select('sold_count')
+          .eq('id', item.ticket_product_id)
+          .single();
+
+        if (product) {
+          await supabase
+            .from('ticket_products')
+            .update({ sold_count: (product.sold_count || 0) + item.quantity })
+            .eq('id', item.ticket_product_id);
+        }
+      }
+
+      // 仮押さえを購入済みに更新
+      await supabase
+        .from('ticket_holds')
+        .update({ status: 'purchased' })
+        .eq('id', hold.id);
+    }
+    console.log(`チケット発行完了（仮押さえ経由）: user=${userId}, holds=${holds.length}`);
+    return;
+  }
+
+  // レガシー: 直接チケット購入（仮押さえなし）
   const ticketProductId = order.ticket_product_id;
   const quantity = order.ticket_quantity || 1;
 
-  // チケットを発行
-  const tickets = Array.from({ length: quantity }, () => ({
-    user_id: userId,
-    ticket_product_id: ticketProductId,
-    status: 'valid',
-  }));
-
-  await supabase.from('user_tickets').insert(tickets);
-
-  console.log(`チケット発行完了: user=${userId}, product=${ticketProductId}, qty=${quantity}`);
+  if (ticketProductId) {
+    const tickets = Array.from({ length: quantity }, () => ({
+      user_id: userId,
+      ticket_product_id: ticketProductId,
+      payment_order_id: order.id,
+      status: 'valid',
+    }));
+    await supabase.from('user_tickets').insert(tickets);
+    console.log(`チケット発行完了（直接）: user=${userId}, product=${ticketProductId}, qty=${quantity}`);
+  }
 }
