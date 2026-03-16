@@ -7,6 +7,22 @@ export const ROLE_LABELS: Record<string, string> = {
   admin: 'アンコール管理者',
 };
 
+/**
+ * ロール自動展開ルール
+ * fan       → [fan]
+ * idol      → [fan, idol]
+ * organizer → [fan, idol, organizer]
+ * admin     → [fan, idol, organizer, admin]
+ */
+export function expandRoles(baseRole: string): string[] {
+  switch (baseRole) {
+    case 'admin':     return ['fan', 'idol', 'organizer', 'admin'];
+    case 'organizer': return ['fan', 'idol', 'organizer'];
+    case 'idol':      return ['fan', 'idol'];
+    default:          return ['fan'];
+  }
+}
+
 export const ROLE_COLORS: Record<string, string> = {
   fan: '#6366f1',
   idol: '#ec4899',
@@ -48,7 +64,7 @@ export async function getUserRoles(userId: string): Promise<string[]> {
       .select('role')
       .eq('id', userId)
       .single();
-    if (profile?.role) return [profile.role];
+    if (profile?.role) return expandRoles(profile.role);
     return ['fan'];
   }
   return data.map(r => r.role);
