@@ -49,7 +49,8 @@ export function getActiveRole(user: { user_metadata?: Record<string, any> }): st
 
 /**
  * user_roles テーブルからユーザーの全ロールを取得
- * テーブル未作成時は profiles.role にフォールバック
+ * テーブル未作成時は user_metadata.role → profiles.role にフォールバック
+ * user_metadata.role は登録時の種別権限（最も信頼できるソース）
  */
 export async function getUserRoles(userId: string): Promise<string[]> {
   const { data, error } = await supabase
@@ -57,17 +58,37 @@ export async function getUserRoles(userId: string): Promise<string[]> {
     .select('role')
     .eq('user_id', userId);
 
-  // テーブル未作成 (404) やエラー時は profiles.role にフォールバック
-  if (error || !data || data.length === 0) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single();
-    if (profile?.role) return expandRoles(profile.role);
-    return ['fan'];
+  // user_roles テーブルが正常に動作している場合
+  if (!error && data && data.length > 0) {
+    return data.map(r => r.role);
   }
-  return data.map(r => r.role);
+
+  // フォールバック: user_metadata.role と profiles.role の両方を確認
+  // profiles.role は switchRole で変わるが、user_metadata.role は登録時の種別を保持
+  const roles = new Set<string>();
+
+  // user_metadata.role から展開（登録時の種別権限）
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.user_metadata?.role) {
+    for (const r of expandRoles(user.user_metadata.role)) {
+      roles.add(r);
+    }
+  }
+
+  // profiles.role からも展開（現在のアクティブロール）
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+  if (profile?.role) {
+    for (const r of expandRoles(profile.role)) {
+      roles.add(r);
+    }
+  }
+
+  if (roles.size > 0) return Array.from(roles);
+  return ['fan'];
 }
 
 /**
@@ -87,9 +108,8 @@ export async function switchRole(newRole: string): Promise<boolean> {
     }
   }
 
-  // user_metadata も更新（JWT反映のため）
-  await supabase.auth.updateUser({ data: { role: newRole } });
-
+  // 注意: user_metadata.role は登録時の種別権限を保持するため更新しない
+  // アクティブロールは localStorage + profiles.role で管理する
   localStorage.setItem('active_role', newRole);
   return true;
 }

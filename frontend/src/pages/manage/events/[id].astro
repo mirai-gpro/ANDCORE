@@ -172,7 +172,7 @@ import Layout from '../../../layouts/Layout.astro';
 
     const { data: members } = await supabase
       .from('idol_members')
-      .select('id, name, group_id')
+      .select('id, name, group_id, profile_id')
       .in('group_id', selectedGroupIds)
       .order('sort_order');
 
@@ -180,7 +180,8 @@ import Layout from '../../../layouts/Layout.astro';
     idolGroups.forEach(g => { groupNameMap[g.id] = g.name; });
 
     groupMembers = (members || []).map(m => ({
-      id: m.id, name: m.name, group_id: m.group_id,
+      id: m.profile_id || null,
+      name: m.name, group_id: m.group_id,
       group_name: groupNameMap[m.group_id] || '',
     }));
   }

@@ -72,6 +72,17 @@ import Layout from '../../layouts/Layout.astro';
     }
 
     const user = data.session.user;
+    const metaRole = user.user_metadata?.role;
+
+    // まず ensure_profile で DB 状態を同期（ロールが登録済みなら保持される）
+    if (metaRole === 'admin' || metaRole === 'organizer') {
+      await supabase.rpc('ensure_profile', {
+        target_role: metaRole,
+        target_nickname: user.user_metadata?.full_name || user.user_metadata?.name || null,
+        target_avatar_url: user.user_metadata?.avatar_url || null,
+      });
+    }
+
     const roles = await getUserRoles(user.id);
     const targetRole = roles.includes('admin') ? 'admin' : roles.includes('organizer') ? 'organizer' : null;
 
@@ -131,6 +142,17 @@ import Layout from '../../layouts/Layout.astro';
     if (!data.user) {
       showMessage('ログインに失敗しました。', true);
       return;
+    }
+
+    const metaRoleEmail = data.user.user_metadata?.role;
+
+    // まず ensure_profile で DB 状態を同期
+    if (metaRoleEmail === 'admin' || metaRoleEmail === 'organizer') {
+      await supabase.rpc('ensure_profile', {
+        target_role: metaRoleEmail,
+        target_nickname: data.user.user_metadata?.nickname || data.user.user_metadata?.full_name || null,
+        target_avatar_url: data.user.user_metadata?.avatar_url || null,
+      });
     }
 
     const roles = await getUserRoles(data.user.id);
