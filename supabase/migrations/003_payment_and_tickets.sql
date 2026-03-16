@@ -68,6 +68,7 @@ create policy "payment_orders: 自分の注文のみ作成可能"
   with check (user_id = auth.uid());
 
 -- point_transactions insert ポリシー
+drop policy if exists "point_transactions: service_role経由で作成可能" on point_transactions;
 create policy "point_transactions: service_role経由で作成可能"
   on point_transactions for insert
   with check (true);
@@ -199,21 +200,25 @@ create policy "ticket_hold_items: 自分の仮押さえ明細のみ作成可能"
     and ticket_holds.user_id = auth.uid()
   ));
 
--- event_dates / event_time_slots のRLS
+-- event_dates / event_time_slots のRLS（既存ポリシーがあればスキップ）
 alter table event_dates enable row level security;
 
+drop policy if exists "event_dates: 全ユーザーが閲覧可能" on event_dates;
 create policy "event_dates: 全ユーザーが閲覧可能"
   on event_dates for select using (true);
 
+drop policy if exists "event_dates: adminのみ作成可能" on event_dates;
 create policy "event_dates: adminのみ作成可能"
   on event_dates for insert
   with check (exists (select 1 from profiles where id = auth.uid() and role = 'admin'));
 
 alter table event_time_slots enable row level security;
 
+drop policy if exists "event_time_slots: 全ユーザーが閲覧可能" on event_time_slots;
 create policy "event_time_slots: 全ユーザーが閲覧可能"
   on event_time_slots for select using (true);
 
+drop policy if exists "event_time_slots: adminのみ作成可能" on event_time_slots;
 create policy "event_time_slots: adminのみ作成可能"
   on event_time_slots for insert
   with check (exists (select 1 from profiles where id = auth.uid() and role = 'admin'));
