@@ -1,0 +1,157 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+const { id } = Astro.params;
+---
+
+<Layout title="チケット購入">
+  <div id="ticket-purchase-root" data-event-id={id}></div>
+</Layout>
+
+<script>
+  import { createElement } from 'react';
+  import { createRoot } from 'react-dom/client';
+  import TicketPurchase from '../../../components/TicketPurchase';
+
+  const root = document.getElementById('ticket-purchase-root');
+  if (root) {
+    const eventId = root.dataset.eventId || '';
+    createRoot(root).render(createElement(TicketPurchase, { eventId }));
+  }
+</script>
+
+<style is:global>
+  .ticket-page { max-width: 600px; }
+  .ticket-page h1 { font-size: 1.3rem; margin-bottom: 0.25rem; }
+  .ticket-page h2 { font-size: 1rem; color: #6b7280; margin-bottom: 1rem; }
+
+  .back-btn {
+    background: none; border: none; color: #6366f1; cursor: pointer;
+    font-size: 0.85rem; padding: 0; margin-bottom: 1rem; font-family: inherit;
+  }
+  .back-btn:hover { color: #4f46e5; }
+
+  .error-msg {
+    background: #fee2e2; color: #991b1b; padding: 0.75rem 1rem;
+    border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem;
+  }
+
+  /* Mode selector */
+  .mode-selector {
+    display: flex; gap: 0.75rem; margin-bottom: 1.5rem;
+  }
+  .mode-option {
+    flex: 1; padding: 0.75rem 1rem; border: 2px solid #e5e7eb;
+    border-radius: 8px; text-align: center; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; transition: all 0.2s;
+  }
+  .mode-option input { display: none; }
+  .mode-option.active {
+    border-color: #6366f1; background: #f5f3ff; color: #6366f1;
+  }
+
+  /* List cards */
+  .date-list h2, .member-list h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #1a1a2e; }
+  .list-card {
+    display: flex; justify-content: space-between; align-items: center;
+    width: 100%; padding: 1rem; background: white; border: 1px solid #e5e7eb;
+    border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer;
+    font-family: inherit; font-size: 0.95rem; transition: border-color 0.2s;
+    text-align: left;
+  }
+  .list-card:hover { border-color: #6366f1; }
+  .list-card-title { font-weight: 600; }
+  .list-card-meta { color: #6b7280; font-size: 0.8rem; }
+
+  /* Member products */
+  .member-products { margin-bottom: 1rem; }
+  .member-section {
+    background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 1rem; margin-bottom: 0.75rem;
+  }
+  .member-name {
+    font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem; border-bottom: 1px solid #f3f4f6;
+  }
+  .product-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.5rem 0;
+  }
+  .product-info { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .product-type {
+    font-size: 0.85rem; font-weight: 600; background: #f3f4f6;
+    padding: 0.15rem 0.5rem; border-radius: 4px;
+  }
+  .product-price { font-size: 0.85rem; color: #6b7280; }
+  .product-stock { font-size: 0.75rem; color: #f59e0b; }
+
+  /* Quantity control */
+  .qty-control { display: flex; align-items: center; gap: 0; }
+  .qty-btn {
+    width: 32px; height: 32px; border: 1px solid #e5e7eb; background: white;
+    cursor: pointer; font-size: 1rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qty-btn:first-child { border-radius: 6px 0 0 6px; }
+  .qty-btn:last-child { border-radius: 0 6px 6px 0; }
+  .qty-btn:hover { background: #f3f4f6; }
+  .qty-value {
+    width: 40px; height: 32px; display: flex; align-items: center; justify-content: center;
+    border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;
+    font-weight: 600; font-size: 0.9rem;
+  }
+
+  /* Selection total */
+  .selection-total {
+    text-align: right; font-weight: 700; color: #6366f1;
+    font-size: 1rem; margin-bottom: 1rem;
+  }
+
+  /* Action bar */
+  .action-bar { margin-bottom: 1rem; }
+
+  /* Buttons */
+  .ticket-page .btn {
+    display: block; width: 100%; padding: 0.75rem; border: none;
+    border-radius: 8px; font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; font-family: inherit; text-align: center; margin-bottom: 0.5rem;
+  }
+  .ticket-page .btn-primary { background: #6366f1; color: white; }
+  .ticket-page .btn-primary:hover { background: #4f46e5; }
+  .ticket-page .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  .ticket-page .btn-secondary {
+    background: white; color: #1a1a2e; border: 1px solid #e5e7eb;
+  }
+  .ticket-page .btn-secondary:hover { border-color: #6b7280; }
+
+  /* Cart badge (floating) */
+  .cart-badge {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    background: #6366f1; color: white; padding: 0.75rem 1.5rem;
+    border-radius: 9999px; font-weight: 600; font-size: 0.9rem;
+    cursor: pointer; box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+    z-index: 50;
+  }
+  .cart-badge:hover { background: #4f46e5; }
+
+  /* Cart */
+  .cart-list { margin-bottom: 1rem; }
+  .cart-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 0.85rem 1rem; margin-bottom: 0.5rem;
+  }
+  .cart-item-info { display: flex; flex-direction: column; gap: 0.15rem; }
+  .cart-item-info strong { font-size: 0.9rem; }
+  .cart-item-type { font-size: 0.75rem; color: #6b7280; }
+  .cart-item-calc { display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem; font-size: 0.85rem; }
+  .cart-item-calc strong { color: #6366f1; }
+
+  .cart-total {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 1rem; background: #f5f3ff; border-radius: 8px;
+    margin-bottom: 1.5rem; font-size: 0.95rem;
+  }
+  .cart-total strong { font-size: 1.15rem; color: #6366f1; }
+
+  .cart-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+</style>
