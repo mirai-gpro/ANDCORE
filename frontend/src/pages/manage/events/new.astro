@@ -50,21 +50,20 @@ import Layout from '../../../layouts/Layout.astro';
         <div class="form-group">
           <label for="venue-map-url">GoogleMap リンク</label>
           <input type="url" id="venue-map-url" placeholder="上のボタンで検索 → 共有 → URLを貼り付け" />
-          <p class="field-hint">GoogleMapで会場の「共有」ボタンからリンクをコピーして貼り付けてください。</p>
         </div>
       </fieldset>
 
-      <!-- 開催日程 -->
+      <!-- 開催日程・メンバー・券種 -->
       <fieldset class="fieldset">
-        <legend>開催日程</legend>
-        <p class="field-hint">複数日程がある場合は「日程を追加」で追加できます。各日程に複数回の時間帯を設定可能です。</p>
+        <legend>開催日程・メンバー・券種</legend>
+        <p class="field-hint">日程→時間帯→出演メンバー→券種の順に設定します。グループを選択すると、メンバーを自動追加できます。</p>
         <div id="dates-container"></div>
         <button type="button" id="add-date-btn" class="btn-add">+ 日程を追加</button>
       </fieldset>
 
-      <!-- チケット -->
+      <!-- チケット代金（入場料） -->
       <fieldset class="fieldset">
-        <legend>チケット代金</legend>
+        <legend>入場チケット代金</legend>
         <div class="form-group">
           <div class="price-row">
             <label class="checkbox-label">
@@ -76,6 +75,7 @@ import Layout from '../../../layouts/Layout.astro';
         <div class="form-group" id="price-group">
           <label for="ticket-price">代金（円）</label>
           <input type="number" id="ticket-price" min="0" step="100" placeholder="例: 3000" />
+          <p class="field-hint">入場料です。メンバーごとの撮影券等は上の日程セクションで設定してください。</p>
         </div>
       </fieldset>
 
@@ -119,10 +119,13 @@ import Layout from '../../../layouts/Layout.astro';
 
   let currentUser: any = null;
   let dateIndex = 0;
+  let slotIndex = 0;
   let idolGroups: { id: string; name: string; photo_url: string | null }[] = [];
+  // 選択グループのメンバー一覧
+  let groupMembers: { id: string; name: string; group_id: string; group_name: string }[] = [];
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
+  const defaultTicketTypes = ['撮影券', 'チェキ券', 'サイン券'];
 
-  // URLパラメータからコピー元IDを取得
   const params = new URLSearchParams(window.location.search);
   const copyFromId = params.get('copy');
 
@@ -155,6 +158,42 @@ import Layout from '../../../layouts/Layout.astro';
         <span class="idol-check-name">${g.name}</span>
       </label>
     `).join('');
+
+    // グループ選択変更時にメンバー一覧を更新
+    container.addEventListener('change', loadGroupMembers);
+
+    // 初期チェック済みの場合
+    if (checkedIds.length > 0) {
+      await loadGroupMembers();
+    }
+  }
+
+  // 選択されたグループのメンバーを読み込み
+  async function loadGroupMembers() {
+    const selectedGroupIds = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[name="idol-group"]:checked')
+    ).map(el => el.value);
+
+    if (selectedGroupIds.length === 0) {
+      groupMembers = [];
+      return;
+    }
+
+    const { data: members } = await supabase
+      .from('idol_members')
+      .select('id, name, group_id')
+      .in('group_id', selectedGroupIds)
+      .order('sort_order');
+
+    const groupNameMap: Record<string, string> = {};
+    idolGroups.forEach(g => { groupNameMap[g.id] = g.name; });
+
+    groupMembers = (members || []).map(m => ({
+      id: m.id,
+      name: m.name,
+      group_id: m.group_id,
+      group_name: groupNameMap[m.group_id] || '',
+    }));
   }
 
   // --- 日程追加 ---
@@ -178,7 +217,6 @@ import Layout from '../../../layouts/Layout.astro';
     `;
     container.appendChild(row);
 
-    // 初期時間帯を追加
     if (slots && slots.length > 0) {
       slots.forEach(s => addSlotRow(idx, s.door_time, s.start_time));
     } else {
@@ -188,24 +226,38 @@ import Layout from '../../../layouts/Layout.astro';
 
   function addSlotRow(dateIdx: number, doorTime?: string, startTime?: string) {
     const container = document.querySelector(`.slots-container[data-idx="${dateIdx}"]`)!;
+    const sid = slotIndex++;
     const slotDiv = document.createElement('div');
     slotDiv.className = 'slot-row';
+    slotDiv.dataset.slotIdx = String(sid);
     slotDiv.innerHTML = `
-      <div class="slot-fields">
-        <div class="form-group">
-          <label>開始時間 <span class="required">*</span></label>
-          <input type="time" class="start-time" required step="300" value="${startTime || ''}" />
+      <div class="slot-top">
+        <div class="slot-fields">
+          <div class="form-group">
+            <label>開始時間 <span class="required">*</span></label>
+            <input type="time" class="start-time" required step="300" value="${startTime || ''}" />
+          </div>
+          <div class="form-group">
+            <label>開場時間</label>
+            <input type="time" class="door-time" step="300" value="${doorTime || ''}" />
+          </div>
         </div>
-        <div class="form-group">
-          <label>開場時間</label>
-          <input type="time" class="door-time" step="300" value="${doorTime || ''}" />
-        </div>
+        <button type="button" class="btn-remove-slot">&times;</button>
       </div>
-      <button type="button" class="btn-remove-slot">&times;</button>
+      <div class="slot-members" data-slot-idx="${sid}">
+        <div class="members-header">
+          <span class="members-label">出演メンバー・券種</span>
+          <div class="members-actions">
+            <button type="button" class="btn-auto-add-members" data-slot-idx="${sid}">グループから一括追加</button>
+            <button type="button" class="btn-add-member" data-slot-idx="${sid}">+ メンバー追加</button>
+          </div>
+        </div>
+        <div class="members-list" data-slot-idx="${sid}"></div>
+      </div>
     `;
     container.appendChild(slotDiv);
 
-    // 開始時間が変更されたら、開場時間を自動で30分前に設定
+    // 開始時間→開場時間自動設定
     const startInput = slotDiv.querySelector('.start-time') as HTMLInputElement;
     const doorInput = slotDiv.querySelector('.door-time') as HTMLInputElement;
     startInput.addEventListener('change', () => {
@@ -220,54 +272,128 @@ import Layout from '../../../layouts/Layout.astro';
     });
   }
 
-  // イベントリスナー: 日程追加
+  // メンバー追加
+  function addMemberRow(slotIdx: number, memberName?: string) {
+    const list = document.querySelector(`.members-list[data-slot-idx="${slotIdx}"]`)!;
+    const memberDiv = document.createElement('div');
+    memberDiv.className = 'member-card';
+    memberDiv.innerHTML = `
+      <div class="member-header-row">
+        <input type="text" class="member-name-input" value="${memberName || ''}" placeholder="メンバー名" />
+        <button type="button" class="btn-remove-member">&times;</button>
+      </div>
+      <div class="products-list">
+        ${renderProductRow('撮影券', 1000, '')}
+      </div>
+      <button type="button" class="btn-add-product">+ 券種追加</button>
+    `;
+    list.appendChild(memberDiv);
+  }
+
+  function renderProductRow(ticketType: string, price: number, stockLimit: string): string {
+    return `
+      <div class="product-row">
+        <select class="product-type-select">
+          ${defaultTicketTypes.map(t => `<option value="${t}" ${ticketType === t ? 'selected' : ''}>${t}</option>`).join('')}
+          <option value="custom" ${!defaultTicketTypes.includes(ticketType) ? 'selected' : ''}>カスタム</option>
+        </select>
+        ${!defaultTicketTypes.includes(ticketType) && ticketType !== '撮影券' ? `<input type="text" class="product-type-custom" value="${ticketType}" placeholder="券種名" />` : ''}
+        <div class="product-price-wrap">
+          <span class="yen">¥</span>
+          <input type="number" class="product-price" value="${price}" min="0" step="100" placeholder="価格" />
+        </div>
+        <div class="product-stock-wrap">
+          <input type="number" class="product-stock" value="${stockLimit}" min="0" placeholder="無制限" />
+          <span class="stock-unit">枚</span>
+        </div>
+        <button type="button" class="btn-remove-product">&times;</button>
+      </div>
+    `;
+  }
+
+  // --- イベント委任 ---
   document.getElementById('add-date-btn')!.addEventListener('click', () => addDateRow());
 
-  // イベントリスナー: 日程削除・時間帯追加/削除（イベント委任）
   document.getElementById('dates-container')!.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
 
     // 日程削除
     const removeDate = target.closest('.btn-remove-date') as HTMLElement;
-    if (removeDate) {
-      removeDate.closest('.date-row')!.remove();
-      return;
-    }
+    if (removeDate) { removeDate.closest('.date-row')!.remove(); return; }
 
     // 時間帯追加
     const addSlot = target.closest('.btn-add-slot') as HTMLElement;
-    if (addSlot) {
-      addSlotRow(Number(addSlot.dataset.idx));
-      return;
-    }
+    if (addSlot) { addSlotRow(Number(addSlot.dataset.idx)); return; }
 
     // 時間帯削除
     const removeSlot = target.closest('.btn-remove-slot') as HTMLElement;
-    if (removeSlot) {
-      removeSlot.closest('.slot-row')!.remove();
+    if (removeSlot) { removeSlot.closest('.slot-row')!.remove(); return; }
+
+    // メンバー手動追加
+    const addMember = target.closest('.btn-add-member') as HTMLElement;
+    if (addMember) { addMemberRow(Number(addMember.dataset.slotIdx)); return; }
+
+    // グループから一括追加
+    const autoAdd = target.closest('.btn-auto-add-members') as HTMLElement;
+    if (autoAdd) {
+      const slotIdx = Number(autoAdd.dataset.slotIdx);
+      if (groupMembers.length === 0) {
+        alert('出演者グループを先に選択してください。');
+        return;
+      }
+      // 既存メンバーをクリアして追加
+      const list = document.querySelector(`.members-list[data-slot-idx="${slotIdx}"]`)!;
+      list.innerHTML = '';
+      groupMembers.forEach(m => addMemberRow(slotIdx, m.name));
       return;
+    }
+
+    // メンバー削除
+    const removeMember = target.closest('.btn-remove-member') as HTMLElement;
+    if (removeMember) { removeMember.closest('.member-card')!.remove(); return; }
+
+    // 券種追加
+    const addProduct = target.closest('.btn-add-product') as HTMLElement;
+    if (addProduct) {
+      const card = addProduct.closest('.member-card')!;
+      const productsList = card.querySelector('.products-list')!;
+      productsList.insertAdjacentHTML('beforeend', renderProductRow('撮影券', 1000, ''));
+      return;
+    }
+
+    // 券種削除
+    const removeProduct = target.closest('.btn-remove-product') as HTMLElement;
+    if (removeProduct) { removeProduct.closest('.product-row')!.remove(); return; }
+  });
+
+  // 券種セレクト変更（カスタム入力の表示/非表示）
+  document.getElementById('dates-container')!.addEventListener('change', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('product-type-select')) {
+      const select = target as HTMLSelectElement;
+      const row = select.closest('.product-row')!;
+      const existing = row.querySelector('.product-type-custom');
+      if (select.value === 'custom' && !existing) {
+        select.insertAdjacentHTML('afterend', '<input type="text" class="product-type-custom" value="" placeholder="券種名" />');
+      } else if (select.value !== 'custom' && existing) {
+        existing.remove();
+      }
     }
   });
 
-  // GoogleMapで検索ボタン
+  // GoogleMap
   document.getElementById('open-map-btn')!.addEventListener('click', () => {
     const venueName = (document.getElementById('venue-name') as HTMLInputElement).value.trim();
-    if (!venueName) {
-      alert('会場名を入力してからボタンを押してください。');
-      return;
-    }
-    const url = `https://www.google.com/maps/search/${encodeURIComponent(venueName)}`;
-    window.open(url, '_blank', 'width=800,height=600');
+    if (!venueName) { alert('会場名を入力してからボタンを押してください。'); return; }
+    window.open(`https://www.google.com/maps/search/${encodeURIComponent(venueName)}`, '_blank', 'width=800,height=600');
   });
 
-  // 無料チェックボックス
+  // 無料チェック
   const isFreeCheckbox = document.getElementById('is-free') as HTMLInputElement;
   const priceGroup = document.getElementById('price-group') as HTMLDivElement;
   isFreeCheckbox.addEventListener('change', () => {
     priceGroup.style.display = isFreeCheckbox.checked ? 'none' : 'flex';
-    if (isFreeCheckbox.checked) {
-      (document.getElementById('ticket-price') as HTMLInputElement).value = '';
-    }
+    if (isFreeCheckbox.checked) (document.getElementById('ticket-price') as HTMLInputElement).value = '';
   });
 
   // 画像プレビュー
@@ -275,19 +401,15 @@ import Layout from '../../../layouts/Layout.astro';
     const file = (e.target as HTMLInputElement).files?.[0];
     const preview = document.getElementById('image-preview')!;
     if (file) {
-      const url = URL.createObjectURL(file);
-      preview.innerHTML = `<img src="${url}" alt="プレビュー" />`;
+      preview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="プレビュー" />`;
       preview.classList.remove('hidden');
     } else {
       preview.classList.add('hidden');
     }
   });
 
-  // 画像アップロード
   async function uploadImage(file: File, path: string): Promise<string | null> {
-    const { data, error } = await supabase.storage
-      .from('photos')
-      .upload(path, file, { upsert: true });
+    const { data, error } = await supabase.storage.from('photos').upload(path, file, { upsert: true });
     if (error) { console.error('Upload error:', error); return null; }
     const { data: urlData } = supabase.storage.from('photos').getPublicUrl(data.path);
     return urlData.publicUrl;
@@ -299,10 +421,8 @@ import Layout from '../../../layouts/Layout.astro';
       supabase.from('events').select('*').eq('id', copyId).single(),
       supabase.from('event_performers').select('idol_group_id').eq('event_id', copyId).order('sort_order'),
     ]);
-
     if (!event) return;
 
-    // コピー元の出演グループIDでチェックを再描画
     const checkedIds = (copyPerformers || []).map((p: any) => p.idol_group_id);
     await loadIdolGroups(currentUser.id, checkedIds);
 
@@ -323,8 +443,6 @@ import Layout from '../../../layouts/Layout.astro';
     } else {
       (document.getElementById('ticket-price') as HTMLInputElement).value = String(event.ticket_price);
     }
-
-    // 日程はコピーしない（新しい日程を入力してもらう）ので1つだけ空で追加
     addDateRow();
   }
 
@@ -342,7 +460,6 @@ import Layout from '../../../layouts/Layout.astro';
     const priceVal = (document.getElementById('ticket-price') as HTMLInputElement).value;
     const ticketPrice = isFree ? null : (priceVal ? parseInt(priceVal, 10) : null);
 
-    // 選択されたアイドルグループID
     const selectedGroupIds = Array.from(
       document.querySelectorAll<HTMLInputElement>('input[name="idol-group"]:checked')
     ).map(el => el.value);
@@ -360,25 +477,57 @@ import Layout from '../../../layouts/Layout.astro';
       return;
     }
 
-    // 日程の収集
+    // 日程・スロット・メンバー・券種の収集
     const dateRows = document.querySelectorAll('.date-row');
     if (dateRows.length === 0) { showMessage('日程を1つ以上追加してください。', true); return; }
 
-    const dates: { date: string; slots: { start_time: string; door_time: string }[] }[] = [];
+    interface ProductData { ticket_type: string; price: number; stock_limit: number | null; }
+    interface MemberData { display_name: string; products: ProductData[]; }
+    interface SlotCollected { start_time: string; door_time: string; members: MemberData[]; }
+    interface DateCollected { date: string; slots: SlotCollected[]; }
+
+    const dates: DateCollected[] = [];
+
     for (const row of dateRows) {
       const dateInput = row.querySelector('.date-input') as HTMLInputElement;
       if (!dateInput.value) { showMessage('開催日を入力してください。', true); return; }
 
-      const slots: { start_time: string; door_time: string }[] = [];
+      const slotsColl: SlotCollected[] = [];
       const slotRows = row.querySelectorAll('.slot-row');
       for (const slotRow of slotRows) {
         const startTime = (slotRow.querySelector('.start-time') as HTMLInputElement).value;
         const doorTime = (slotRow.querySelector('.door-time') as HTMLInputElement).value;
         if (!startTime) { showMessage('開始時間を入力してください。', true); return; }
-        slots.push({ start_time: startTime, door_time: doorTime || startTime });
+
+        // メンバー収集
+        const members: MemberData[] = [];
+        const memberCards = slotRow.querySelectorAll('.member-card');
+        for (const card of memberCards) {
+          const name = (card.querySelector('.member-name-input') as HTMLInputElement).value.trim();
+          if (!name) continue;
+
+          const products: ProductData[] = [];
+          const productRows = card.querySelectorAll('.product-row');
+          for (const pr of productRows) {
+            const selectEl = pr.querySelector('.product-type-select') as HTMLSelectElement;
+            let ticketType = selectEl.value;
+            if (ticketType === 'custom') {
+              const customInput = pr.querySelector('.product-type-custom') as HTMLInputElement;
+              ticketType = customInput?.value.trim() || '撮影券';
+            }
+            const price = parseInt((pr.querySelector('.product-price') as HTMLInputElement).value) || 0;
+            const stockVal = (pr.querySelector('.product-stock') as HTMLInputElement).value;
+            const stockLimit = stockVal ? parseInt(stockVal) : null;
+            products.push({ ticket_type: ticketType, price, stock_limit: stockLimit });
+          }
+
+          members.push({ display_name: name, products: products.length > 0 ? products : [{ ticket_type: '撮影券', price: 1000, stock_limit: null }] });
+        }
+
+        slotsColl.push({ start_time: startTime, door_time: doorTime || startTime, members });
       }
 
-      dates.push({ date: dateInput.value, slots });
+      dates.push({ date: dateInput.value, slots: slotsColl });
     }
 
     showMessage('登録中...');
@@ -394,11 +543,11 @@ import Layout from '../../../layouts/Layout.astro';
         imageUrl = await uploadImage(imageFile, path);
       }
 
-      // イベント登録
-      // performers フィールド: 選択グループ名 + フリー入力を結合して保存（表示用）
+      // performers表示用テキスト
       const selectedNames = idolGroups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name);
       const allPerformers = [...selectedNames, ...(performersFree ? [performersFree] : [])].join(' / ');
 
+      // イベント登録
       const { data: event, error: eventError } = await supabase
         .from('events')
         .insert({
@@ -422,25 +571,55 @@ import Layout from '../../../layouts/Layout.astro';
 
       if (eventError) throw eventError;
 
-      // 日程と時間帯を登録
+      // 日程 → 時間帯 → メンバー → 券種を登録
       for (const d of dates) {
         const { data: dateRow, error: dateError } = await supabase
           .from('event_dates')
           .insert({ event_id: event.id, event_date: d.date })
           .select('id')
           .single();
-
         if (dateError) throw dateError;
 
         for (const slot of d.slots) {
-          const { error: slotError } = await supabase
+          const { data: slotRow, error: slotError } = await supabase
             .from('event_time_slots')
-            .insert({
-              event_date_id: dateRow.id,
-              start_time: slot.start_time,
-              door_time: slot.door_time,
-            });
+            .insert({ event_date_id: dateRow.id, start_time: slot.start_time, door_time: slot.door_time })
+            .select('id')
+            .single();
           if (slotError) throw slotError;
+
+          // メンバー登録
+          for (let mi = 0; mi < slot.members.length; mi++) {
+            const member = slot.members[mi];
+            // groupMembersからidol_idを検索
+            const matched = groupMembers.find(gm => gm.name === member.display_name);
+
+            const { data: slotMember, error: memberError } = await supabase
+              .from('event_slot_members')
+              .insert({
+                event_time_slot_id: slotRow.id,
+                idol_id: matched?.id || null,
+                display_name: member.display_name,
+                sort_order: mi,
+              })
+              .select('id')
+              .single();
+            if (memberError) throw memberError;
+
+            // 券種登録
+            for (const product of member.products) {
+              const { error: prodError } = await supabase
+                .from('ticket_products')
+                .insert({
+                  event_id: event.id,
+                  event_slot_member_id: slotMember.id,
+                  ticket_type: product.ticket_type,
+                  price: product.price,
+                  stock_limit: product.stock_limit,
+                });
+              if (prodError) throw prodError;
+            }
+          }
         }
       }
 
@@ -451,8 +630,7 @@ import Layout from '../../../layouts/Layout.astro';
           idol_group_id: gid,
           sort_order: i,
         }));
-        const { error: perfError } = await supabase.from('event_performers').insert(rows);
-        if (perfError) throw perfError;
+        await supabase.from('event_performers').insert(rows);
       }
 
       showMessage('イベントを登録しました。リダイレクト中...');
@@ -477,7 +655,6 @@ import Layout from '../../../layouts/Layout.astro';
 
     currentUser = user;
 
-    // profiles が確実に存在するよう保証
     await supabase.rpc('ensure_profile', {
       target_role: role,
       target_nickname: user.user_metadata?.full_name || user.user_metadata?.name || null,
@@ -496,7 +673,7 @@ import Layout from '../../../layouts/Layout.astro';
 </script>
 
 <style>
-  .page { max-width: 680px; margin: 0 auto; }
+  .page { max-width: 720px; margin: 0 auto; }
 
   .back-link {
     font-size: 0.8rem;
@@ -507,12 +684,7 @@ import Layout from '../../../layouts/Layout.astro';
   .back-link:hover { color: var(--color-primary); }
 
   h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-
-  .subtitle {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-    margin-bottom: 2rem;
-  }
+  .subtitle { color: var(--color-text-muted); font-size: 0.9rem; margin-bottom: 2rem; }
 
   .form { display: flex; flex-direction: column; gap: 1.5rem; }
 
@@ -523,32 +695,13 @@ import Layout from '../../../layouts/Layout.astro';
     background: var(--color-surface);
     box-shadow: var(--shadow);
   }
+  .fieldset legend { font-weight: 700; font-size: 0.95rem; padding: 0 0.5rem; }
 
-  .fieldset legend {
-    font-weight: 700;
-    font-size: 0.95rem;
-    padding: 0 0.5rem;
-  }
+  .field-hint { font-size: 0.78rem; color: var(--color-text-muted); margin-bottom: 0.75rem; }
 
-  .field-hint {
-    font-size: 0.78rem;
-    color: var(--color-text-muted);
-    margin-bottom: 0.75rem;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-    margin-bottom: 1rem;
-  }
+  .form-group { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
   .form-group:last-child { margin-bottom: 0; }
-
-  .form-group label {
-    font-size: 0.85rem;
-    font-weight: 500;
-  }
-
+  .form-group label { font-size: 0.85rem; font-weight: 500; }
   .required { color: #ef4444; }
 
   .form-group input[type="text"],
@@ -565,213 +718,169 @@ import Layout from '../../../layouts/Layout.astro';
     transition: border-color 0.2s;
     font-family: inherit;
   }
-
-  .form-group input:focus,
-  .form-group textarea:focus {
-    border-color: var(--color-primary);
-  }
-
+  .form-group input:focus, .form-group textarea:focus { border-color: var(--color-primary); }
   .form-group input[type="file"] { font-size: 0.85rem; }
 
   .photo-preview img {
-    max-width: 300px;
-    max-height: 200px;
-    border-radius: var(--radius);
-    margin-top: 0.5rem;
-    object-fit: cover;
+    max-width: 300px; max-height: 200px;
+    border-radius: var(--radius); margin-top: 0.5rem; object-fit: cover;
   }
 
-  .idol-groups-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-    margin-bottom: 0.75rem;
-  }
-
+  .idol-groups-list { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 0.75rem; }
   .idol-check-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    font-size: 0.9rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.75rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); cursor: pointer;
+    transition: border-color 0.2s, background 0.2s; font-size: 0.9rem;
   }
+  .idol-check-item:hover { border-color: var(--color-primary); background: #f0fdf4; }
+  .idol-check-item:has(input:checked) { border-color: var(--color-primary); background: #ecfdf5; }
+  .idol-check-photo { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+  .idol-check-photo-empty { display: inline-block; background: var(--color-border); }
+  .idol-check-name { font-weight: 500; }
 
-  .idol-check-item:hover {
-    border-color: var(--color-primary);
-    background: #f0fdf4;
-  }
-
-  .idol-check-item:has(input:checked) {
-    border-color: var(--color-primary);
-    background: #ecfdf5;
-  }
-
-  .idol-check-photo {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
-
-  .idol-check-photo-empty {
-    display: inline-block;
-    background: var(--color-border);
-  }
-
-  .idol-check-name {
-    font-weight: 500;
-  }
-
-  .venue-name-row {
-    display: flex;
-    gap: 0.5rem;
-  }
-
+  .venue-name-row { display: flex; gap: 0.5rem; }
   .venue-name-row input { flex: 1; }
 
   .btn-map {
-    flex-shrink: 0;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #059669;
-    background: transparent;
-    color: #059669;
-    border-radius: var(--radius);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.2s, color 0.2s;
+    flex-shrink: 0; padding: 0.5rem 0.75rem;
+    border: 1px solid #059669; background: transparent; color: #059669;
+    border-radius: var(--radius); font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap; transition: background 0.2s, color 0.2s;
   }
+  .btn-map:hover { background: #059669; color: white; }
 
-  .btn-map:hover {
-    background: #059669;
-    color: white;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-
+  .checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
   .price-row { flex-direction: row; }
 
   /* 日程行 */
   .date-row {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: 1rem;
-    margin-bottom: 0.75rem;
-    background: #fafafa;
+    border: 1px solid var(--color-border); border-radius: var(--radius);
+    padding: 1rem; margin-bottom: 0.75rem; background: #fafafa;
   }
-
   .date-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.75rem;
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;
   }
-
-  .date-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--color-primary);
-  }
+  .date-label { font-size: 0.85rem; font-weight: 600; color: var(--color-primary); }
 
   .btn-remove-date, .btn-remove-slot {
-    background: none;
-    border: none;
-    color: #ef4444;
-    font-size: 0.8rem;
-    cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    background: none; border: none; color: #ef4444;
+    font-size: 0.8rem; cursor: pointer; padding: 0.25rem 0.5rem;
   }
   .btn-remove-date:hover, .btn-remove-slot:hover { text-decoration: underline; }
 
   /* 時間帯行 */
   .slot-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-    padding: 0.5rem;
-    background: white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    margin-bottom: 0.75rem; padding: 0.75rem;
+    background: white; border: 1px solid var(--color-border); border-radius: var(--radius);
   }
-
-  .slot-fields {
-    display: flex;
-    gap: 0.75rem;
-    flex: 1;
-  }
-
+  .slot-top { display: flex; align-items: flex-start; gap: 0.5rem; }
+  .slot-fields { display: flex; gap: 0.75rem; flex: 1; }
   .slot-fields .form-group { margin-bottom: 0; flex: 1; }
+  .slot-top > .btn-remove-slot { flex-shrink: 0; margin-top: 1.5rem; }
 
-  .btn-remove-slot {
-    flex-shrink: 0;
-    margin-bottom: 0.375rem;
+  /* メンバーセクション */
+  .slot-members {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--color-border);
   }
+  .members-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.375rem;
+  }
+  .members-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); }
+  .members-actions { display: flex; gap: 0.375rem; }
+
+  .btn-add-member, .btn-auto-add-members {
+    padding: 0.3rem 0.6rem; border-radius: var(--radius);
+    font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px dashed;
+    background: transparent;
+  }
+  .btn-add-member { border-color: var(--color-primary); color: var(--color-primary); }
+  .btn-add-member:hover { background: #f5f3ff; }
+  .btn-auto-add-members { border-color: #059669; color: #059669; }
+  .btn-auto-add-members:hover { background: #ecfdf5; }
+
+  /* メンバーカード */
+  .member-card {
+    background: #f9fafb; border: 1px solid var(--color-border);
+    border-radius: var(--radius); padding: 0.6rem; margin-bottom: 0.375rem;
+  }
+  .member-header-row { display: flex; gap: 0.375rem; align-items: center; margin-bottom: 0.375rem; }
+  .member-name-input {
+    flex: 1; padding: 0.4rem 0.5rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.85rem; font-weight: 600;
+    outline: none; font-family: inherit;
+  }
+  .member-name-input:focus { border-color: var(--color-primary); }
+  .btn-remove-member {
+    background: none; border: none; color: #ef4444;
+    font-size: 1rem; cursor: pointer; padding: 0.2rem 0.4rem; line-height: 1;
+  }
+
+  /* 券種行 */
+  .products-list { display: flex; flex-direction: column; gap: 0.25rem; }
+  .product-row { display: flex; gap: 0.25rem; align-items: center; flex-wrap: wrap; }
+  .product-type-select {
+    padding: 0.3rem 0.4rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.78rem; min-width: 80px; font-family: inherit;
+  }
+  .product-type-custom {
+    padding: 0.3rem 0.4rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.78rem; width: 80px; font-family: inherit;
+  }
+  .product-price-wrap, .product-stock-wrap {
+    display: flex; align-items: center; gap: 0.1rem;
+  }
+  .yen, .stock-unit { font-size: 0.75rem; color: var(--color-text-muted); }
+  .product-price {
+    width: 64px; padding: 0.3rem 0.3rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.78rem; text-align: right; font-family: inherit;
+  }
+  .product-stock {
+    width: 52px; padding: 0.3rem 0.3rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.78rem; text-align: right; font-family: inherit;
+  }
+  .product-price:focus, .product-stock:focus, .product-type-custom:focus {
+    outline: none; border-color: var(--color-primary);
+  }
+  .btn-remove-product {
+    background: none; border: none; color: #ef4444;
+    font-size: 0.8rem; cursor: pointer; padding: 0.15rem 0.3rem; line-height: 1;
+  }
+  .btn-add-product {
+    padding: 0.25rem; background: transparent; border: 1px dashed var(--color-border);
+    border-radius: var(--radius); color: var(--color-text-muted);
+    font-size: 0.72rem; cursor: pointer; text-align: center; margin-top: 0.25rem;
+  }
+  .btn-add-product:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
   .btn-add, .btn-add-slot {
-    width: 100%;
-    padding: 0.6rem;
-    background: transparent;
-    border: 2px dashed var(--color-border);
-    border-radius: var(--radius);
-    color: var(--color-text-muted);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-    margin-top: 0.5rem;
+    width: 100%; padding: 0.6rem; background: transparent;
+    border: 2px dashed var(--color-border); border-radius: var(--radius);
+    color: var(--color-text-muted); font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s; margin-top: 0.5rem;
   }
-
-  .btn-add:hover, .btn-add-slot:hover {
-    border-color: var(--color-primary);
-    color: var(--color-primary);
-  }
-
-  .btn-add-slot {
-    border-width: 1px;
-    border-style: dashed;
-    font-size: 0.8rem;
-    padding: 0.4rem;
-  }
+  .btn-add:hover, .btn-add-slot:hover { border-color: var(--color-primary); color: var(--color-primary); }
+  .btn-add-slot { border-width: 1px; border-style: dashed; font-size: 0.8rem; padding: 0.4rem; }
 
   .btn-submit {
-    width: 100%;
-    padding: 0.875rem;
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    border-radius: var(--radius);
-    font-size: 1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.2s;
+    width: 100%; padding: 0.875rem; background: var(--color-primary); color: white;
+    border: none; border-radius: var(--radius); font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: background 0.2s;
   }
   .btn-submit:hover { background: var(--color-primary-dark); }
   .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
-  .message {
-    padding: 0.75rem;
-    border-radius: var(--radius);
-    font-size: 0.85rem;
-    margin-bottom: 1rem;
-  }
+  .message { padding: 0.75rem; border-radius: var(--radius); font-size: 0.85rem; margin-bottom: 1rem; }
   .message-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
   .message-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
   .hidden { display: none; }
 
   @media (max-width: 600px) {
     .slot-fields { flex-direction: column; gap: 0.5rem; }
+    .product-row { flex-direction: column; align-items: stretch; }
+    .members-header { flex-direction: column; align-items: flex-start; }
   }
 </style>
