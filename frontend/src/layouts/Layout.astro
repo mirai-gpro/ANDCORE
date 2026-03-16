@@ -27,11 +27,16 @@ const { title } = Astro.props;
         <div id="nav-links" class="nav-links">
           <a href="/events">イベント</a>
           <a href="/for-organizers" class="nav-biz">運営者様ページ</a>
-          <div id="nav-mypage" class="nav-mypage" style="display:none;">
-            <button id="nav-mypage-btn" class="nav-mypage-btn">マイページ</button>
-            <div id="nav-mypage-dropdown" class="nav-mypage-dropdown">
-              <a href="/dashboard" id="nav-mypage-link">マイページ</a>
-              <button id="logout-btn-header" class="nav-logout-btn">ログアウト</button>
+          <div id="nav-role-switcher" class="nav-role-switcher" style="display:none;">
+            <button id="nav-role-btn" class="nav-role-btn">
+              <span id="nav-role-label" class="nav-role-label"></span>
+              <span class="nav-role-arrow">▼</span>
+            </button>
+            <div id="nav-role-dropdown" class="nav-role-dropdown">
+              <div id="nav-role-list" class="nav-role-list"></div>
+              <div class="nav-role-divider"></div>
+              <a href="/dashboard" id="nav-mypage-link" class="nav-role-item">マイページ</a>
+              <button id="logout-btn-header" class="nav-role-item nav-logout-btn">ログアウト</button>
             </div>
           </div>
           <a href="/auth/login" id="nav-auth">ログイン</a>
@@ -46,14 +51,17 @@ const { title } = Astro.props;
     </footer>
     <script>
       import { supabase } from '../lib/supabase';
+      import { getActiveRole, getUserRoles, switchRole, ROLE_LABELS, ROLE_COLORS, ROLE_DASHBOARDS } from '../lib/roles';
 
       async function updateNav() {
         const navLinks = document.getElementById('nav-links');
         const navAuth = document.getElementById('nav-auth') as HTMLElement | null;
         const navBiz = document.querySelector('.nav-biz') as HTMLElement | null;
-        const navMypage = document.getElementById('nav-mypage') as HTMLElement | null;
-        const navMypageBtn = document.getElementById('nav-mypage-btn');
-        const navMypageDropdown = document.getElementById('nav-mypage-dropdown');
+        const navRoleSwitcher = document.getElementById('nav-role-switcher') as HTMLElement | null;
+        const navRoleBtn = document.getElementById('nav-role-btn');
+        const navRoleLabel = document.getElementById('nav-role-label');
+        const navRoleDropdown = document.getElementById('nav-role-dropdown');
+        const navRoleList = document.getElementById('nav-role-list');
         const navMypageLink = document.getElementById('nav-mypage-link') as HTMLAnchorElement | null;
         const logoutBtn = document.getElementById('logout-btn-header');
         if (!navLinks || !navAuth) return;
@@ -62,61 +70,98 @@ const { title } = Astro.props;
         const user = session?.user;
 
         if (user) {
-          const role = user.user_metadata?.role;
+          const activeRole = getActiveRole(user);
+          const userRoles = await getUserRoles(user.id);
 
-          // ログインリンクを非表示にし、マイページドロップダウンを表示
+          // localStorage が未設定の場合、profiles.role から同期
+          if (!localStorage.getItem('active_role')) {
+            localStorage.setItem('active_role', activeRole);
+          }
+
+          // activeRole が userRoles に含まれない場合（ロール剥奪された場合など）
+          const validRole = userRoles.includes(activeRole) ? activeRole : userRoles[0] || 'fan';
+          if (validRole !== activeRole) {
+            localStorage.setItem('active_role', validRole);
+          }
+          const role = validRole;
+
+          // ログインリンクを非表示にし、ロール切替を表示
           navAuth.style.display = 'none';
-          if (navMypage) navMypage.style.display = '';
+          if (navRoleSwitcher) navRoleSwitcher.style.display = '';
+
+          // アクティブロール表示
+          if (navRoleLabel) {
+            navRoleLabel.textContent = ROLE_LABELS[role] || role;
+            navRoleLabel.style.background = ROLE_COLORS[role] || ROLE_COLORS.fan;
+          }
 
           // ロール別にマイページのリンク先を設定
-          let dashboardHref = '/dashboard';
-          if (role === 'idol') dashboardHref = '/idol';
-          else if (role === 'organizer') dashboardHref = '/manage';
-          else if (role === 'admin') dashboardHref = '/dashboard';
-          if (navMypageLink) navMypageLink.href = dashboardHref;
+          if (navMypageLink) navMypageLink.href = ROLE_DASHBOARDS[role] || '/dashboard';
+
+          // ロールリストをドロップダウンに表示
+          if (navRoleList) {
+            navRoleList.innerHTML = userRoles.map(r => `
+              <button class="nav-role-option ${r === role ? 'active' : ''}" data-role="${r}">
+                <span class="nav-role-dot" style="background:${ROLE_COLORS[r] || ROLE_COLORS.fan}"></span>
+                ${ROLE_LABELS[r] || r}
+                ${r === role ? '<span class="nav-role-check">✓</span>' : ''}
+              </button>
+            `).join('');
+
+            // ロール切替イベント
+            navRoleList.querySelectorAll('.nav-role-option').forEach(btn => {
+              btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const newRole = (btn as HTMLElement).dataset.role!;
+                if (newRole === role) return;
+
+                const ok = await switchRole(newRole);
+                if (ok) {
+                  window.location.href = ROLE_DASHBOARDS[newRole] || '/dashboard';
+                }
+              });
+            });
+          }
 
           // ログイン後は「運営者様ページ」を非表示にする
           if (navBiz) navBiz.style.display = 'none';
 
-          if (role === 'fan') {
-            // ファン: イベント | マイページ
-          } else if (role === 'idol') {
-            // アイドル: イベント | ポータル | マイページ
+          // ロール別ナビリンク追加
+          if (role === 'idol') {
             const link = document.createElement('a');
             link.href = '/idol';
             link.textContent = 'ポータル';
-            navLinks.insertBefore(link, navMypage);
+            navLinks.insertBefore(link, navRoleSwitcher);
           } else if (role === 'organizer') {
-            // 運営者: イベント | 運営管理 | マイページ
             const link = document.createElement('a');
             link.href = '/manage';
             link.textContent = '運営管理';
-            navLinks.insertBefore(link, navMypage);
+            navLinks.insertBefore(link, navRoleSwitcher);
           } else if (role === 'admin') {
-            // 管理者: イベント | 運営管理 | ANDCORE管理 | マイページ
             const manageLink = document.createElement('a');
             manageLink.href = '/manage';
             manageLink.textContent = '運営管理';
             const adminLink = document.createElement('a');
             adminLink.href = '/admin';
             adminLink.textContent = 'ANDCORE管理';
-            navLinks.insertBefore(manageLink, navMypage);
-            navLinks.insertBefore(adminLink, navMypage);
+            navLinks.insertBefore(manageLink, navRoleSwitcher);
+            navLinks.insertBefore(adminLink, navRoleSwitcher);
           }
 
           // ドロップダウン開閉
-          navMypageBtn?.addEventListener('click', (e) => {
+          navRoleBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
-            navMypageDropdown?.classList.toggle('open');
+            navRoleDropdown?.classList.toggle('open');
           });
 
           // 外側クリックで閉じる
           document.addEventListener('click', () => {
-            navMypageDropdown?.classList.remove('open');
+            navRoleDropdown?.classList.remove('open');
           });
 
           // ログアウト
           logoutBtn?.addEventListener('click', async () => {
+            localStorage.removeItem('active_role');
             await supabase.auth.signOut();
             window.location.href = '/';
           });
@@ -218,25 +263,38 @@ const { title } = Astro.props;
     color: white;
   }
 
-  .nav-mypage {
+  .nav-role-switcher {
     position: relative;
   }
 
-  .nav-mypage-btn {
+  .nav-role-btn {
     background: none;
     border: none;
-    color: var(--color-primary);
-    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
     cursor: pointer;
-    padding: 0;
+    padding: 0.25rem 0;
     font-family: inherit;
   }
 
-  .nav-mypage-btn:hover {
-    color: var(--color-primary-dark);
+  .nav-role-label {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    white-space: nowrap;
   }
 
-  .nav-mypage-dropdown {
+  .nav-role-arrow {
+    font-size: 0.6rem;
+    color: var(--color-text-muted);
+  }
+
+  .nav-role-dropdown {
     display: none;
     position: absolute;
     top: calc(100% + 8px);
@@ -245,30 +303,73 @@ const { title } = Astro.props;
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    min-width: 150px;
+    min-width: 200px;
     z-index: 200;
     overflow: hidden;
+    flex-direction: column;
   }
 
-  .nav-mypage-dropdown.open {
+  .nav-role-dropdown.open {
+    display: flex;
+  }
+
+  .nav-role-list {
     display: flex;
     flex-direction: column;
   }
 
-  .nav-mypage-dropdown a,
-  .nav-mypage-dropdown button {
-    padding: 0.7rem 1rem;
+  .nav-role-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    color: var(--color-text);
+    width: 100%;
+  }
+
+  .nav-role-option:hover {
+    background: #f3f4f6;
+  }
+
+  .nav-role-option.active {
+    background: #f0f0ff;
+    font-weight: 600;
+  }
+
+  .nav-role-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .nav-role-check {
+    margin-left: auto;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+  }
+
+  .nav-role-divider {
+    height: 1px;
+    background: var(--color-border);
+  }
+
+  .nav-role-item {
+    padding: 0.6rem 1rem;
     font-size: 0.85rem;
     text-align: left;
     white-space: nowrap;
-  }
-
-  .nav-mypage-dropdown a {
-    color: var(--color-text);
     display: block;
+    color: var(--color-text);
   }
 
-  .nav-mypage-dropdown a:hover {
+  .nav-role-item:hover {
     background: #f3f4f6;
   }
 
