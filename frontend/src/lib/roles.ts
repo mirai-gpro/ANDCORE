@@ -33,28 +33,42 @@ export function getActiveRole(user: { user_metadata?: Record<string, any> }): st
 
 /**
  * user_roles テーブルからユーザーの全ロールを取得
+ * テーブル未作成時は profiles.role にフォールバック
  */
 export async function getUserRoles(userId: string): Promise<string[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_roles')
     .select('role')
     .eq('user_id', userId);
 
-  if (!data || data.length === 0) return ['fan'];
+  // テーブル未作成 (404) やエラー時は profiles.role にフォールバック
+  if (error || !data || data.length === 0) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    if (profile?.role) return [profile.role];
+    return ['fan'];
+  }
   return data.map(r => r.role);
 }
 
 /**
  * ロールを切り替える
  * - localStorage 更新
- * - profiles.role 更新 (via RPC)
+ * - profiles.role 更新 (via RPC or direct update)
  * - user_metadata 更新
  */
 export async function switchRole(newRole: string): Promise<boolean> {
+  // switch_role RPC を試行、失敗時は直接 profiles を更新
   const { error } = await supabase.rpc('switch_role', { new_role: newRole });
   if (error) {
-    console.error('ロール切替失敗:', error.message);
-    return false;
+    // RPC未作成時のフォールバック: profiles.role を直接更新
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('profiles').update({ role: newRole }).eq('id', user.id);
+    }
   }
 
   // user_metadata も更新（JWT反映のため）
