@@ -8,7 +8,7 @@ import Layout from '../../layouts/Layout.astro';
     <p>開催中・予定のイベントを確認できます</p>
   </div>
 
-  <div id="events-list" class="events-grid">
+  <div id="events-list" class="events-list">
     <p class="loading">イベント読み込み中...</p>
   </div>
 
@@ -66,16 +66,9 @@ import Layout from '../../layouts/Layout.astro';
         : '日程未定';
 
       return `
-      <a href="/events/${event.id}/tickets" class="event-card-link">
-        <div class="event-card">
-          <div class="event-status status-${event.status}">
-            ${event.status === 'active' ? '開催中' : '予定'}
-          </div>
-          <h3>${event.title}</h3>
-          <p class="event-meta">${dateDisplay}</p>
-          <p class="event-location">${event.venue_name || '会場未定'}</p>
-          ${event.description ? `<p class="event-desc">${event.description}</p>` : ''}
-        </div>
+      <a href="/events/${event.id}/tickets" class="event-row">
+        <span class="event-row-title">${event.title}</span>
+        <span class="event-row-date">${dateDisplay}</span>
       </a>`;
     }).join('');
   }
@@ -98,10 +91,9 @@ import Layout from '../../layouts/Layout.astro';
     font-size: 0.9rem;
   }
 
-  .events-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1rem;
+  .events-list {
+    display: flex;
+    flex-direction: column;
   }
 
   .loading {
@@ -124,66 +116,40 @@ import Layout from '../../layouts/Layout.astro';
 </style>
 
 <style is:global>
-  .event-card-link {
+  .event-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1rem;
     text-decoration: none;
     color: inherit;
-    display: block;
+    border-bottom: 1px solid var(--color-border);
+    transition: background-color 0.15s;
   }
 
-  .event-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    box-shadow: var(--shadow);
-    position: relative;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    cursor: pointer;
+  .event-row:first-child {
+    border-top: 1px solid var(--color-border);
   }
 
-  .event-card:hover {
-    border-color: var(--color-primary, #6366f1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  .event-row:hover {
+    background-color: var(--color-surface-hover, rgba(0, 0, 0, 0.02));
   }
 
-  .event-status {
-    display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border-radius: 9999px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
+  .event-row-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 1rem;
   }
 
-  .status-active {
-    background: #dcfce7;
-    color: #16a34a;
-  }
-
-  .status-scheduled {
-    background: #dbeafe;
-    color: #2563eb;
-  }
-
-  .event-card h3 {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .event-meta {
+  .event-row-date {
     font-size: 0.85rem;
     color: var(--color-text-muted);
-    margin-bottom: 0.25rem;
-  }
-
-  .event-location {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-  }
-
-  .event-desc {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    margin-top: 0.5rem;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 </style>
