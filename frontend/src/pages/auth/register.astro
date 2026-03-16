@@ -50,12 +50,18 @@ import Layout from '../../layouts/Layout.astro';
 
 <script>
   import { supabase } from '../../lib/supabase';
+  import { getActiveRole, ROLE_DASHBOARDS } from '../../lib/roles';
 
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
 
   function showMessage(text: string, isError = false) {
     messageEl.textContent = text;
     messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
+  }
+
+  function redirectToDashboard(user: any) {
+    const role = getActiveRole(user);
+    window.location.href = ROLE_DASHBOARDS[role] || '/dashboard';
   }
 
   // Google credential callback
@@ -73,7 +79,7 @@ import Layout from '../../layouts/Layout.astro';
       showMessage('セッションの取得に失敗しました。もう一度お試しください。', true);
     } else {
       showMessage('登録が完了しました。リダイレクト中...');
-      window.location.href = '/dashboard';
+      redirectToDashboard(data.session.user);
     }
   }
 

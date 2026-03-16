@@ -47,6 +47,17 @@ import Layout from '../../layouts/Layout.astro';
       </div>
     </section>
 
+    <!-- チケット販売状況 -->
+    <section class="section">
+      <div class="section-header">
+        <h2>チケット販売状況</h2>
+        <span class="section-hint">出演イベントの全メンバー分</span>
+      </div>
+      <div id="ticket-sales" class="ticket-sales">
+        <p class="empty-state">読み込み中...</p>
+      </div>
+    </section>
+
     <!-- メニュー -->
     <section class="section">
       <h2>コミュニティ管理</h2>
@@ -88,6 +99,7 @@ import Layout from '../../layouts/Layout.astro';
 
 <script>
   import { supabase } from '../../lib/supabase';
+  import { getActiveRole } from '../../lib/roles';
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -97,7 +109,7 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
-    const role = user.user_metadata?.role;
+    const role = getActiveRole(user);
     if (role !== 'idol' && role !== 'admin') {
       window.location.href = '/dashboard';
       return;
@@ -181,8 +193,199 @@ import Layout from '../../layouts/Layout.astro';
       rankingList.innerHTML = '<p class="empty-state">まだランキングデータがありません</p>';
     }
 
+    // === チケット販売状況を取得 ===
+    await loadTicketSales(user.id);
+
     document.getElementById('idol-loading')!.classList.add('hidden');
     document.getElementById('idol-content')!.classList.remove('hidden');
+  }
+
+  async function loadTicketSales(userId: string) {
+    const salesContainer = document.getElementById('ticket-sales')!;
+
+    // このユーザーのidol_memberレコードを取得（profile_id一致）
+    const { data: myIdolMembers } = await supabase
+      .from('idol_members')
+      .select('id, group_id')
+      .eq('profile_id', userId);
+
+    // idol_membersにprofile_idが紐づいてない場合、event_slot_membersのidol_idで検索
+    const { data: mySlotMembers } = await supabase
+      .from('event_slot_members')
+      .select('id, event_time_slot_id')
+      .eq('idol_id', userId);
+
+    // 自分が出演するスロットIDを集める
+    let mySlotIds: string[] = [];
+    if (mySlotMembers && mySlotMembers.length > 0) {
+      mySlotIds = mySlotMembers.map(m => m.event_time_slot_id);
+    } else if (myIdolMembers && myIdolMembers.length > 0) {
+      // idol_membersのidでevent_slot_membersを検索
+      const idolMemberIds = myIdolMembers.map(m => m.id);
+      // event_slot_membersのidol_idはprofiles.idを参照するので、
+      // idol_members.idではなくprofile_idで既に検索済み。
+      // 別の方法: display_nameで検索（フォールバック）
+    }
+
+    if (mySlotIds.length === 0) {
+      // 直接profile_idでも検索してみる
+      const { data: slotsByProfile } = await supabase
+        .from('event_slot_members')
+        .select('event_time_slot_id')
+        .eq('idol_id', userId);
+
+      if (slotsByProfile && slotsByProfile.length > 0) {
+        mySlotIds = slotsByProfile.map(m => m.event_time_slot_id);
+      }
+    }
+
+    if (mySlotIds.length === 0) {
+      salesContainer.innerHTML = '<p class="empty-state">出演イベントがありません</p>';
+      return;
+    }
+
+    // スロット→日程→イベントを逆引き
+    const { data: slots } = await supabase
+      .from('event_time_slots')
+      .select('id, start_time, event_date_id, event_dates(id, event_date, event_id, events(id, title))')
+      .in('id', mySlotIds);
+
+    if (!slots || slots.length === 0) {
+      salesContainer.innerHTML = '<p class="empty-state">出演イベントがありません</p>';
+      return;
+    }
+
+    // イベントIDを収集
+    const eventIds = new Set<string>();
+    for (const s of slots) {
+      const ed = s.event_dates as any;
+      if (ed?.events?.id) eventIds.add(ed.events.id);
+    }
+
+    if (eventIds.size === 0) {
+      salesContainer.innerHTML = '<p class="empty-state">出演イベントがありません</p>';
+      return;
+    }
+
+    // そのイベントの全日程・全スロット・全メンバーを取得（自分だけでなく全員）
+    const { data: allDates } = await supabase
+      .from('event_dates')
+      .select('id, event_id, event_date')
+      .in('event_id', Array.from(eventIds))
+      .order('event_date');
+
+    const allDateIds = (allDates || []).map(d => d.id);
+    const { data: allSlots } = allDateIds.length > 0
+      ? await supabase.from('event_time_slots').select('id, event_date_id, start_time').in('event_date_id', allDateIds).order('start_time')
+      : { data: [] };
+
+    const allSlotIds = (allSlots || []).map(s => s.id);
+    const { data: allMembers } = allSlotIds.length > 0
+      ? await supabase.from('event_slot_members').select('id, event_time_slot_id, display_name, idol_id, sort_order').in('event_time_slot_id', allSlotIds).order('sort_order')
+      : { data: [] };
+
+    // チケット商品
+    const { data: allProducts } = await supabase
+      .from('ticket_products')
+      .select('id, event_id, event_slot_member_id, ticket_type, price, stock_limit')
+      .in('event_id', Array.from(eventIds));
+
+    // 販売数
+    const productIds = (allProducts || []).map(p => p.id);
+    let salesMap: Record<string, { valid: number; used: number; total: number }> = {};
+    if (productIds.length > 0) {
+      const { data: userTickets } = await supabase
+        .from('user_tickets')
+        .select('ticket_product_id, status')
+        .in('ticket_product_id', productIds);
+      for (const t of (userTickets || [])) {
+        if (!salesMap[t.ticket_product_id]) salesMap[t.ticket_product_id] = { valid: 0, used: 0, total: 0 };
+        salesMap[t.ticket_product_id].total++;
+        if (t.status === 'valid') salesMap[t.ticket_product_id].valid++;
+        if (t.status === 'used') salesMap[t.ticket_product_id].used++;
+      }
+    }
+
+    // マップ構築
+    const datesByEvent: Record<string, any[]> = {};
+    for (const d of (allDates || [])) {
+      if (!datesByEvent[d.event_id]) datesByEvent[d.event_id] = [];
+      datesByEvent[d.event_id].push(d);
+    }
+    const slotsByDate: Record<string, any[]> = {};
+    for (const s of (allSlots || [])) {
+      if (!slotsByDate[s.event_date_id]) slotsByDate[s.event_date_id] = [];
+      slotsByDate[s.event_date_id].push(s);
+    }
+    const membersBySlot: Record<string, any[]> = {};
+    for (const m of (allMembers || [])) {
+      if (!membersBySlot[m.event_time_slot_id]) membersBySlot[m.event_time_slot_id] = [];
+      membersBySlot[m.event_time_slot_id].push(m);
+    }
+    const productsByMember: Record<string, any[]> = {};
+    for (const p of (allProducts || [])) {
+      if (p.event_slot_member_id) {
+        if (!productsByMember[p.event_slot_member_id]) productsByMember[p.event_slot_member_id] = [];
+        productsByMember[p.event_slot_member_id].push(p);
+      }
+    }
+
+    // イベント名マップ
+    const eventNameMap: Record<string, string> = {};
+    for (const s of slots) {
+      const ed = s.event_dates as any;
+      if (ed?.events) eventNameMap[ed.events.id] = ed.events.title;
+    }
+
+    function formatDate(dateStr: string) {
+      return new Date(dateStr + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' });
+    }
+
+    // HTML生成
+    let html = '';
+    for (const eventId of eventIds) {
+      const dates = datesByEvent[eventId] || [];
+      html += `<div class="sales-event">`;
+      html += `<div class="sales-event-title">${eventNameMap[eventId] || 'イベント'}</div>`;
+
+      for (const date of dates) {
+        const slotsForDate = slotsByDate[date.id] || [];
+        for (const slot of slotsForDate) {
+          const members = membersBySlot[slot.id] || [];
+          if (members.length === 0) continue;
+
+          html += `<div class="sales-slot-header">${formatDate(date.event_date)} ${slot.start_time.slice(0, 5)}</div>`;
+          html += `<table class="sales-table"><thead><tr><th>メンバー</th><th>券種</th><th>価格</th><th>販売</th><th>上限</th></tr></thead><tbody>`;
+
+          for (const member of members) {
+            const isMe = member.idol_id === userId;
+            const products = productsByMember[member.id] || [];
+            const rowClass = isMe ? 'me-row' : '';
+
+            if (products.length === 0) {
+              html += `<tr class="${rowClass}"><td class="member-name">${member.display_name}${isMe ? ' <span class="me-badge">自分</span>' : ''}</td><td colspan="4" class="no-data">券種未設定</td></tr>`;
+              continue;
+            }
+            for (let pi = 0; pi < products.length; pi++) {
+              const p = products[pi];
+              const s = salesMap[p.id] || { valid: 0, used: 0, total: 0 };
+              const stockStr = p.stock_limit != null ? String(p.stock_limit) : '-';
+              html += `<tr class="${rowClass}">
+                ${pi === 0 ? `<td class="member-name" rowspan="${products.length}">${member.display_name}${isMe ? ' <span class="me-badge">自分</span>' : ''}</td>` : ''}
+                <td>${p.ticket_type}</td>
+                <td class="price">¥${p.price.toLocaleString()}</td>
+                <td class="sold">${s.total}枚</td>
+                <td>${stockStr}</td>
+              </tr>`;
+            }
+          }
+          html += `</tbody></table>`;
+        }
+      }
+      html += `</div>`;
+    }
+
+    salesContainer.innerHTML = html || '<p class="empty-state">出演イベントがありません</p>';
   }
 
   document.getElementById('logout-btn')?.addEventListener('click', async () => {
@@ -398,6 +601,85 @@ import Layout from '../../layouts/Layout.astro';
     color: var(--color-text-muted);
     font-size: 0.85rem;
     padding: 1rem;
+  }
+
+  /* Ticket Sales */
+  .ticket-sales {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sales-event {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .sales-event-title {
+    padding: 0.75rem 1rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    background: linear-gradient(135deg, #fdf2f8, #faf5ff);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .sales-slot-header {
+    padding: 0.4rem 0.75rem;
+    background: #f3f4f6;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .sales-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+
+  .sales-table th {
+    background: #f9fafb;
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .sales-table td {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid #f3f4f6;
+    vertical-align: middle;
+  }
+
+  .sales-table tr:last-child td { border-bottom: none; }
+
+  .sales-table .member-name { font-weight: 600; white-space: nowrap; }
+  .sales-table .price { color: var(--color-primary); font-weight: 600; }
+  .sales-table .sold { font-weight: 600; }
+  .sales-table .no-data { color: var(--color-text-muted); font-style: italic; }
+
+  .me-row { background: #fdf2f8; }
+  .me-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #ec4899, #a855f7);
+    color: white;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.1rem 0.35rem;
+    border-radius: 9999px;
+    vertical-align: middle;
+    margin-left: 0.25rem;
+  }
+
+  @media (max-width: 640px) {
+    .sales-table { font-size: 0.7rem; }
+    .sales-table th, .sales-table td { padding: 0.25rem 0.3rem; }
   }
 
   .btn-logout {

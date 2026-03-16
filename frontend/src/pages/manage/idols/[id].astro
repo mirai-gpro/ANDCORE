@@ -79,6 +79,7 @@ const { id } = Astro.params;
 
 <script>
   import { supabase } from '../../../lib/supabase';
+  import { getActiveRole } from '../../../lib/roles';
 
   const groupId = (window as any).__groupId;
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
@@ -105,7 +106,7 @@ const { id } = Astro.params;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { window.location.href = '/auth/login'; return; }
 
-    const role = user.user_metadata?.role;
+    const role = getActiveRole(user);
     if (role !== 'organizer' && role !== 'admin') {
       window.location.href = '/dashboard';
       return;

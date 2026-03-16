@@ -47,6 +47,7 @@ import Layout from '../../layouts/Layout.astro';
 
 <script>
   import { supabase } from '../../lib/supabase';
+  import { getUserRoles, switchRole } from '../../lib/roles';
 
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
 
@@ -56,16 +57,18 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   // Idol role verification helper
-  function verifyIdolRole(role: string | undefined) {
-    if (role !== 'idol') {
-      supabase.auth.signOut();
-      if (role === 'organizer' || role === 'admin') {
+  async function verifyAndSwitchIdolRole(userId: string): Promise<boolean> {
+    const roles = await getUserRoles(userId);
+    if (!roles.includes('idol')) {
+      await supabase.auth.signOut();
+      if (roles.includes('organizer') || roles.includes('admin')) {
         showMessage('このアカウントは運営者アカウントです。運営者ログインをご利用ください。', true);
       } else {
         showMessage('このアカウントはアイドルメンバーとして登録されていません。運営者様にお問い合わせください。', true);
       }
       return false;
     }
+    await switchRole('idol');
     return true;
   }
 
@@ -88,7 +91,7 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
-    if (!verifyIdolRole(data.session.user.user_metadata?.role)) return;
+    if (!(await verifyAndSwitchIdolRole(data.session.user.id))) return;
     showMessage('ログインしました。リダイレクト中...');
     window.location.href = '/idol';
   }
@@ -128,7 +131,7 @@ import Layout from '../../layouts/Layout.astro';
       return;
     }
 
-    if (!verifyIdolRole(data.user?.user_metadata?.role)) return;
+    if (!data.user || !(await verifyAndSwitchIdolRole(data.user.id))) return;
     showMessage('ログインしました。リダイレクト中...');
     window.location.href = '/idol';
   });
