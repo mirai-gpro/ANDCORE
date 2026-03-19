@@ -73,6 +73,32 @@ begin
 end;
 $$ language plpgsql security definer;
 
+-- 運営管理者（organizer）一覧を取得するRPC（累計支出含む）
+create or replace function list_organizers()
+returns table (id uuid, nickname text, points_balance integer, total_spent bigint) as $$
+begin
+  -- admin権限チェック
+  if not exists (
+    select 1 from user_roles where user_id = auth.uid() and role = 'admin'
+  ) then
+    raise exception '管理者権限が必要です';
+  end if;
+
+  return query
+  select
+    p.id,
+    p.nickname::text,
+    p.points_balance,
+    coalesce(abs(sum(case when pt.amount < 0 then pt.amount else 0 end)), 0)::bigint as total_spent
+  from user_roles ur
+  join profiles p on p.id = ur.user_id
+  left join point_transactions pt on pt.user_id = ur.user_id
+  where ur.role = 'organizer'
+  group by p.id, p.nickname, p.points_balance
+  order by p.nickname;
+end;
+$$ language plpgsql security definer;
+
 -- メールアドレスでユーザーにadminロールを付与するRPC
 create or replace function grant_admin_by_email(target_email text)
 returns void as $$

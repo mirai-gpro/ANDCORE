@@ -109,33 +109,10 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   async function loadOrganizers() {
-    // organizer ロールを持つユーザー一覧
-    const { data: orgRoles } = await supabase
-      .from('user_roles')
-      .select('user_id')
-      .eq('role', 'organizer');
+    // RPC経由でorganizer一覧を取得（RLSをバイパス）
+    const { data: organizers, error } = await supabase.rpc('list_organizers');
 
-    if (!orgRoles || orgRoles.length === 0) return;
-
-    const orgIds = orgRoles.map(r => r.user_id);
-    const { data: organizers } = await supabase
-      .from('profiles')
-      .select('id, nickname, points_balance')
-      .in('id', orgIds);
-
-    if (!organizers || organizers.length === 0) return;
-
-    // 各organizerの累計支出を取得
-    const { data: spentData } = await supabase
-      .from('point_transactions')
-      .select('user_id, amount')
-      .in('user_id', orgIds)
-      .lt('amount', 0);
-
-    const spentMap: Record<string, number> = {};
-    for (const tx of (spentData || [])) {
-      spentMap[tx.user_id] = (spentMap[tx.user_id] || 0) + Math.abs(tx.amount);
-    }
+    if (error || !organizers || organizers.length === 0) return;
 
     const wrap = document.getElementById('organizers-list')!;
     wrap.innerHTML = `
@@ -153,7 +130,7 @@ import Layout from '../../layouts/Layout.astro';
             <tr>
               <td>${org.nickname || '(未設定)'}</td>
               <td class="num">${(org.points_balance || 0).toLocaleString()} pt</td>
-              <td class="num">${(spentMap[org.id] || 0).toLocaleString()} pt</td>
+              <td class="num">${(org.total_spent || 0).toLocaleString()} pt</td>
               <td>
                 <div class="inline-grant">
                   <input type="number" min="1" placeholder="pt" class="input input-sm org-grant-input" data-id="${org.id}" />
