@@ -42,6 +42,7 @@ interface CartItem {
 }
 
 type ViewMode = 'select' | 'by_date' | 'by_member' | 'cart' | 'purchasing';
+type PaymentMethod = 'gmo' | 'points';
 
 export default function TicketPurchase({ eventId }: Props) {
   const [userId, setUserId] = useState('');
@@ -67,6 +68,8 @@ export default function TicketPurchase({ eventId }: Props) {
   const [holdId, setHoldId] = useState('');
   const [holdExpires, setHoldExpires] = useState('');
   const [totalAmount, setTotalAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('gmo');
+  const [pointsBalance, setPointsBalance] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -80,6 +83,14 @@ export default function TicketPurchase({ eventId }: Props) {
         return;
       }
       setUserId(session.user.id);
+
+      // ポイント残高
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('points_balance')
+        .eq('id', session.user.id)
+        .single();
+      if (profile) setPointsBalance(profile.points_balance || 0);
 
       // イベント情報
       const { data: event } = await supabase
@@ -258,23 +269,44 @@ export default function TicketPurchase({ eventId }: Props) {
       setHoldExpires(holdData.expires_at);
       setTotalAmount(holdData.total_amount);
 
-      // 2. 決済URL取得
-      const purchaseRes = await fetch('/api/tickets/purchase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          hold_id: holdData.hold_id,
-        }),
-      });
+      if (paymentMethod === 'points') {
+        // ポイント決済
+        const pointRes = await fetch('/api/tickets/purchase-with-points', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            hold_id: holdData.hold_id,
+          }),
+        });
 
-      if (!purchaseRes.ok) {
-        const err = await purchaseRes.json();
-        throw new Error(err.detail || '決済URLの取得に失敗しました');
+        if (!pointRes.ok) {
+          const err = await pointRes.json();
+          throw new Error(err.detail || 'ポイント決済に失敗しました');
+        }
+
+        const pointData = await pointRes.json();
+        setPointsBalance(pointData.points_balance);
+        window.location.href = `/payment/complete?method=points&points_used=${pointData.points_used}`;
+      } else {
+        // GMO決済
+        const purchaseRes = await fetch('/api/tickets/purchase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            hold_id: holdData.hold_id,
+          }),
+        });
+
+        if (!purchaseRes.ok) {
+          const err = await purchaseRes.json();
+          throw new Error(err.detail || '決済URLの取得に失敗しました');
+        }
+
+        const purchaseData = await purchaseRes.json();
+        window.location.href = purchaseData.payment_url;
       }
-
-      const purchaseData = await purchaseRes.json();
-      window.location.href = purchaseData.payment_url;
     } catch (e: any) {
       setError(e.message);
       setViewMode('cart');
@@ -333,13 +365,44 @@ export default function TicketPurchase({ eventId }: Props) {
           <strong>{cartTotal.toLocaleString()}円（税込）</strong>
         </div>
 
+        <div className="payment-method-section">
+          <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>決済方法</h3>
+          <label className={`payment-option ${paymentMethod === 'gmo' ? 'active' : ''}`}>
+            <input
+              type="radio"
+              name="payment"
+              checked={paymentMethod === 'gmo'}
+              onChange={() => setPaymentMethod('gmo')}
+            />
+            <div className="payment-option-content">
+              <span className="payment-option-title">クレジットカード決済</span>
+              <span className="payment-option-desc">決済画面に遷移します</span>
+            </div>
+          </label>
+          <label className={`payment-option ${paymentMethod === 'points' ? 'active' : ''}`}>
+            <input
+              type="radio"
+              name="payment"
+              checked={paymentMethod === 'points'}
+              onChange={() => setPaymentMethod('points')}
+            />
+            <div className="payment-option-content">
+              <span className="payment-option-title">ポイントで購入</span>
+              <span className="payment-option-desc">
+                残高: {pointsBalance.toLocaleString()}pt
+                {pointsBalance < cartTotal && <span style={{ color: '#dc2626', marginLeft: '0.5rem' }}>（残高不足）</span>}
+              </span>
+            </div>
+          </label>
+        </div>
+
         <div className="cart-actions">
           <button
             className="btn btn-primary"
             onClick={handleHoldAndPurchase}
-            disabled={viewMode === 'purchasing'}
+            disabled={viewMode === 'purchasing' || (paymentMethod === 'points' && pointsBalance < cartTotal)}
           >
-            {viewMode === 'purchasing' ? '処理中...' : '購入する（決済へ）'}
+            {viewMode === 'purchasing' ? '処理中...' : paymentMethod === 'points' ? `ポイントで購入する（${cartTotal.toLocaleString()}pt）` : '購入する（決済へ）'}
           </button>
           <button
             className="btn btn-secondary"
