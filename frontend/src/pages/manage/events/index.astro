@@ -117,6 +117,7 @@ import Layout from '../../../layouts/Layout.astro';
 
       const card = document.createElement('div');
       card.className = 'event-card';
+      card.dataset.eventId = event.id;
       card.innerHTML = `
         <div class="event-card-header">
           <div class="event-title-area">
@@ -138,6 +139,43 @@ import Layout from '../../../layouts/Layout.astro';
         </div>
       `;
       list.appendChild(card);
+    }
+
+    // 重複イベントの検出・一括削除
+    const titleMap: Record<string, any[]> = {};
+    for (const event of events) {
+      const key = event.title;
+      if (!titleMap[key]) titleMap[key] = [];
+      titleMap[key].push(event);
+    }
+    const hasDuplicates = Object.values(titleMap).some(arr => arr.length > 1);
+    if (hasDuplicates) {
+      const dupBanner = document.createElement('div');
+      dupBanner.className = 'dup-banner';
+      dupBanner.innerHTML = `
+        <p>同名のイベントが複数あります。重複分を一括削除しますか？</p>
+        <button class="btn-action btn-delete" id="btn-dedup">重複を削除（各1件残す）</button>
+      `;
+      list.parentElement!.insertBefore(dupBanner, list);
+
+      document.getElementById('btn-dedup')!.addEventListener('click', async () => {
+        if (!confirm('同名の重複イベントを削除します（各タイトル最新の1件を残します）。よろしいですか？')) return;
+        let deleted = 0;
+        for (const [, arr] of Object.entries(titleMap)) {
+          if (arr.length <= 1) continue;
+          // created_atが最新のものを残す（降順なので先頭が最新）
+          const toDelete = arr.slice(1);
+          for (const ev of toDelete) {
+            await supabase.from('events').delete().eq('id', ev.id);
+            const card = list.querySelector(`[data-event-id="${ev.id}"]`);
+            if (card) card.remove();
+            deleted++;
+          }
+        }
+        dupBanner.remove();
+        alert(`${deleted}件の重複イベントを削除しました。`);
+        window.location.reload();
+      });
     }
 
     // 削除ボタンのイベント
@@ -344,4 +382,17 @@ import Layout from '../../../layouts/Layout.astro';
     color: #059669;
   }
   .btn-copy:hover { background: #059669; color: white; }
+
+  .dup-banner {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  .dup-banner p { font-size: 0.85rem; font-weight: 500; color: #92400e; }
 </style>

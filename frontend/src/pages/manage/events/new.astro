@@ -121,6 +121,7 @@ import Layout from '../../../layouts/Layout.astro';
   let currentUser: any = null;
   let dateIndex = 0;
   let slotIndex = 0;
+  let createdEventId: string | null = null; // リトライ時の重複防止
   let idolGroups: { id: string; name: string; photo_url: string | null }[] = [];
   // 選択グループのメンバー一覧
   let groupMembers: { id: string; name: string; group_id: string; group_name: string }[] = [];
@@ -563,11 +564,36 @@ import Layout from '../../../layouts/Layout.astro';
       const selectedNames = idolGroups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name);
       const allPerformers = [...selectedNames, ...(performersFree ? [performersFree] : [])].join(' / ');
 
-      // イベント登録
-      const { data: event, error: eventError } = await supabase
-        .from('events')
-        .insert({
-          organizer_id: currentUser.id,
+      // イベント登録（リトライ時は既存のIDを再利用して重複防止）
+      let eventId = createdEventId;
+      if (!eventId) {
+        const { data: event, error: eventError } = await supabase
+          .from('events')
+          .insert({
+            organizer_id: currentUser.id,
+            title,
+            subtitle: subtitle || null,
+            performers: allPerformers || null,
+            venue_name: venueName || null,
+            venue_map_url: venueMapUrl || null,
+            description: description || null,
+            ticket_price: ticketPrice,
+            image_url: imageUrl,
+            youtube_url: youtubeUrl || null,
+            x_url: xUrl || null,
+            instagram_url: instagramUrl || null,
+            tiktok_url: tiktokUrl || null,
+            status: 'scheduled',
+          })
+          .select('id')
+          .single();
+
+        if (eventError) throw eventError;
+        eventId = event.id;
+        createdEventId = eventId;
+      } else {
+        // リトライ: イベント本体を更新、既存の日程等をクリア
+        await supabase.from('events').update({
           title,
           subtitle: subtitle || null,
           performers: allPerformers || null,
@@ -580,18 +606,17 @@ import Layout from '../../../layouts/Layout.astro';
           x_url: xUrl || null,
           instagram_url: instagramUrl || null,
           tiktok_url: tiktokUrl || null,
-          status: 'scheduled',
-        })
-        .select('id')
-        .single();
-
-      if (eventError) throw eventError;
+        }).eq('id', eventId);
+        // cascade deleteで日程以下もクリアされる
+        await supabase.from('event_dates').delete().eq('event_id', eventId);
+        await supabase.from('event_performers').delete().eq('event_id', eventId);
+      }
 
       // 日程 → 時間帯 → メンバー → 券種を登録
       for (const d of dates) {
         const { data: dateRow, error: dateError } = await supabase
           .from('event_dates')
-          .insert({ event_id: event.id, event_date: d.date, sale_start_at: d.sale_start_at, sale_end_at: d.sale_end_at })
+          .insert({ event_id: eventId, event_date: d.date, sale_start_at: d.sale_start_at, sale_end_at: d.sale_end_at })
           .select('id')
           .single();
         if (dateError) throw dateError;
@@ -627,7 +652,7 @@ import Layout from '../../../layouts/Layout.astro';
               const { error: prodError } = await supabase
                 .from('ticket_products')
                 .insert({
-                  event_id: event.id,
+                  event_id: eventId,
                   event_slot_member_id: slotMember.id,
                   ticket_type: product.ticket_type,
                   price: product.price,
@@ -642,7 +667,7 @@ import Layout from '../../../layouts/Layout.astro';
       // 出演アイドルグループをジャンクションテーブルに保存
       if (selectedGroupIds.length > 0) {
         const rows = selectedGroupIds.map((gid, i) => ({
-          event_id: event.id,
+          event_id: eventId,
           idol_group_id: gid,
           sort_order: i,
         }));
