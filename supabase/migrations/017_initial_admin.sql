@@ -32,7 +32,8 @@ begin
 end;
 $$;
 
--- find_user_by_email RPCが未作成なら作成（管理者がメールでユーザーを検索するため）
+-- find_user_by_email を再作成（016で作成済みだがrole列を追加するためDROPが必要）
+drop function if exists find_user_by_email(text);
 create or replace function find_user_by_email(search_email text)
 returns table (id uuid, nickname text, points_balance integer, role text) as $$
 begin
