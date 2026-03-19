@@ -21,11 +21,24 @@ import Layout from '../../layouts/Layout.astro';
 <script>
   const params = new URLSearchParams(window.location.search);
   const orderId = params.get('order_id');
+  const method = params.get('method');
+  const pointsUsed = params.get('points_used');
 
   if (orderId) {
     const orderIdEl = document.getElementById('order-id');
     if (orderIdEl) {
       orderIdEl.textContent = `注文ID: ${orderId}`;
+    }
+  }
+
+  if (method === 'points') {
+    const detailsEl = document.getElementById('result-details');
+    if (detailsEl && pointsUsed) {
+      detailsEl.innerHTML = `<p style="font-size:0.9rem;color:#6b7280;">使用ポイント: <strong>${Number(pointsUsed).toLocaleString()}pt</strong></p>`;
+    }
+    const messageEl = document.querySelector('.result-message');
+    if (messageEl) {
+      messageEl.textContent = 'ポイントでの購入が完了しました。';
     }
   }
 </script>

@@ -199,12 +199,21 @@ import Layout from '../../../layouts/Layout.astro';
     members: ExistingMember[];
   }
 
-  function addDateRow(dateValue?: string, existingSlots?: ExistingSlot[]) {
+  function addDateRow(dateValue?: string, existingSlots?: ExistingSlot[], saleStartAt?: string, saleEndAt?: string) {
     const container = document.getElementById('dates-container')!;
     const idx = dateIndex++;
     const row = document.createElement('div');
     row.className = 'date-row';
     row.dataset.idx = String(idx);
+
+    // ISO → datetime-local 形式に変換
+    const toLocalInput = (iso?: string) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
     row.innerHTML = `
       <div class="date-header">
         <span class="date-label">日程 ${idx + 1}</span>
@@ -213,6 +222,16 @@ import Layout from '../../../layouts/Layout.astro';
       <div class="form-group">
         <label>開催日 <span class="required">*</span></label>
         <input type="date" class="date-input" data-idx="${idx}" required value="${dateValue || ''}" />
+      </div>
+      <div class="sale-period-group">
+        <div class="form-group">
+          <label>販売開始日時</label>
+          <input type="datetime-local" class="sale-start-input" data-idx="${idx}" value="${toLocalInput(saleStartAt)}" />
+        </div>
+        <div class="form-group">
+          <label>販売終了日時</label>
+          <input type="datetime-local" class="sale-end-input" data-idx="${idx}" value="${toLocalInput(saleEndAt)}" />
+        </div>
       </div>
       <div class="slots-container" data-idx="${idx}"></div>
       <button type="button" class="btn-add-slot" data-idx="${idx}">+ 時間帯を追加</button>
@@ -429,12 +448,17 @@ import Layout from '../../../layouts/Layout.astro';
     interface ProductData { ticket_type: string; price: number; stock_limit: number | null; }
     interface MemberData { display_name: string; products: ProductData[]; }
     interface SlotCollected { start_time: string; door_time: string; members: MemberData[]; }
-    interface DateCollected { date: string; slots: SlotCollected[]; }
+    interface DateCollected { date: string; sale_start_at: string | null; sale_end_at: string | null; slots: SlotCollected[]; }
 
     const dates: DateCollected[] = [];
     for (const row of dateRows) {
       const dateInput = row.querySelector('.date-input') as HTMLInputElement;
       if (!dateInput.value) { showMessage('開催日を入力してください。', true); return; }
+
+      const saleStartInput = row.querySelector('.sale-start-input') as HTMLInputElement;
+      const saleEndInput = row.querySelector('.sale-end-input') as HTMLInputElement;
+      const saleStartAt = saleStartInput?.value ? new Date(saleStartInput.value).toISOString() : null;
+      const saleEndAt = saleEndInput?.value ? new Date(saleEndInput.value).toISOString() : null;
 
       const slotsColl: SlotCollected[] = [];
       for (const slotRow of row.querySelectorAll('.slot-row')) {
@@ -461,7 +485,7 @@ import Layout from '../../../layouts/Layout.astro';
         }
         slotsColl.push({ start_time: startTime, door_time: doorTime || startTime, members });
       }
-      dates.push({ date: dateInput.value, slots: slotsColl });
+      dates.push({ date: dateInput.value, sale_start_at: saleStartAt, sale_end_at: saleEndAt, slots: slotsColl });
     }
 
     showMessage('保存中...');
@@ -507,7 +531,7 @@ import Layout from '../../../layouts/Layout.astro';
       for (const d of dates) {
         const { data: dateRow, error: dateError } = await supabase
           .from('event_dates')
-          .insert({ event_id: eventId, event_date: d.date })
+          .insert({ event_id: eventId, event_date: d.date, sale_start_at: d.sale_start_at, sale_end_at: d.sale_end_at })
           .select('id')
           .single();
         if (dateError) throw dateError;
@@ -627,7 +651,7 @@ import Layout from '../../../layouts/Layout.astro';
     // 日程 → 時間帯 → メンバー → 券種を読み込み
     const { data: eventDates } = await supabase
       .from('event_dates')
-      .select('id, event_date, event_time_slots(id, start_time, door_time)')
+      .select('id, event_date, sale_start_at, sale_end_at, event_time_slots(id, start_time, door_time)')
       .eq('event_id', eventId)
       .order('event_date', { ascending: true });
 
@@ -692,7 +716,7 @@ import Layout from '../../../layouts/Layout.astro';
               members,
             };
           });
-        addDateRow(d.event_date, existingSlots);
+        addDateRow(d.event_date, existingSlots, d.sale_start_at, d.sale_end_at);
       }
     } else {
       addDateRow();
@@ -743,6 +767,8 @@ import Layout from '../../../layouts/Layout.astro';
   .checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
   .price-row { flex-direction: row; }
 
+  .sale-period-group { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
+  .sale-period-group .form-group { flex: 1; margin-bottom: 0; }
   .date-row { border: 1px solid var(--color-border); border-radius: var(--radius); padding: 1rem; margin-bottom: 0.75rem; background: #fafafa; }
   .date-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
   .date-label { font-size: 0.85rem; font-weight: 600; color: var(--color-primary); }

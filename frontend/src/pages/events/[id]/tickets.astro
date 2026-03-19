@@ -154,4 +154,17 @@ const { id } = Astro.params;
   .cart-total strong { font-size: 1.15rem; color: #6366f1; }
 
   .cart-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  /* Payment method */
+  .payment-method-section { margin-bottom: 1.5rem; }
+  .payment-option {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.875rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px;
+    margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s;
+  }
+  .payment-option input[type="radio"] { accent-color: #6366f1; width: 18px; height: 18px; flex-shrink: 0; }
+  .payment-option.active { border-color: #6366f1; background: #f5f3ff; }
+  .payment-option-content { display: flex; flex-direction: column; gap: 0.1rem; }
+  .payment-option-title { font-size: 0.9rem; font-weight: 600; }
+  .payment-option-desc { font-size: 0.75rem; color: #6b7280; }
 </style>
