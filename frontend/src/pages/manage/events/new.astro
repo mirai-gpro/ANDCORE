@@ -558,6 +558,11 @@ import Layout from '../../../layouts/Layout.astro';
       if (imageFile) {
         const path = `events/${currentUser.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
         imageUrl = await uploadImage(imageFile, path);
+        if (!imageUrl) {
+          showMessage('画像のアップロードに失敗しました。Storageバケットの設定を確認してください。', true);
+          submitBtn.disabled = false;
+          return;
+        }
       }
 
       // performers表示用テキスト

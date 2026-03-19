@@ -497,7 +497,13 @@ import Layout from '../../../layouts/Layout.astro';
       const imageFile = (document.getElementById('event-image') as HTMLInputElement).files?.[0];
       if (imageFile) {
         const path = `events/${currentUser.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
-        imageUrl = (await uploadImage(imageFile, path)) || undefined;
+        const uploaded = await uploadImage(imageFile, path);
+        if (!uploaded) {
+          showMessage('画像のアップロードに失敗しました。Storageバケットの設定を確認してください。', true);
+          submitBtn.disabled = false;
+          return;
+        }
+        imageUrl = uploaded;
       }
 
       const selectedNames = idolGroups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name);
