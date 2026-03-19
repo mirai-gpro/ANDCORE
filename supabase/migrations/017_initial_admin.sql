@@ -64,7 +64,7 @@ begin
   end if;
 
   return query
-  select ur.user_id as id, u.email, p.nickname, ur.created_at
+  select ur.user_id as id, u.email::text, p.nickname::text, ur.created_at
   from user_roles ur
   join auth.users u on u.id = ur.user_id
   join profiles p on p.id = ur.user_id
