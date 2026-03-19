@@ -1,0 +1,333 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="ポイント管理 - 運営管理">
+  <div class="page">
+    <a href="/manage" class="back-link">&larr; 運営管理に戻る</a>
+
+    <div class="page-header">
+      <div>
+        <h1>ポイント管理</h1>
+        <p class="subtitle">ファンへのポイント付与</p>
+      </div>
+    </div>
+
+    <div id="loading" class="loading">読み込み中...</div>
+    <div id="content" class="hidden">
+
+      <!-- 保有ポイント -->
+      <section class="section">
+        <div class="balance-card">
+          <p class="balance-label">現在の保有ポイント</p>
+          <p class="balance-value"><span id="my-balance">0</span> pt</p>
+        </div>
+      </section>
+
+      <!-- ファンへのポイント付与 -->
+      <section class="section">
+        <h2>ファンへのポイント付与</h2>
+        <div class="search-row">
+          <input type="email" id="fan-email" placeholder="ファンのGoogleアカウント（メール）" class="input input-wide" />
+          <button id="btn-search-fan" class="btn-secondary">検索</button>
+        </div>
+        <div id="fan-result" class="hidden">
+          <div class="fan-info-card">
+            <div class="fan-header">
+              <div>
+                <p class="fan-name" id="fan-name"></p>
+                <p class="fan-email-display" id="fan-email-display"></p>
+              </div>
+              <div class="fan-stats">
+                <div class="fan-stat">
+                  <span class="fan-stat-label">保有ポイント</span>
+                  <span class="fan-stat-value" id="fan-balance">0</span>
+                </div>
+                <div class="fan-stat">
+                  <span class="fan-stat-label">累計支出</span>
+                  <span class="fan-stat-value" id="fan-spent">0</span>
+                </div>
+              </div>
+            </div>
+            <h4>直近のポイント利用履歴</h4>
+            <div id="fan-history" class="history-list"></div>
+            <div class="action-row">
+              <input type="number" id="fan-grant-amount" min="1" placeholder="付与ポイント数" class="input" />
+              <input type="text" id="fan-grant-note" placeholder="メモ（任意）" class="input" />
+              <button id="btn-grant-fan" class="btn-primary">ポイント付与</button>
+            </div>
+            <p id="fan-grant-msg" class="msg hidden"></p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+  import { getActiveRole } from '../../lib/roles';
+
+  let currentUser: any = null;
+  let selectedFanId: string | null = null;
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = '/auth/login'; return; }
+    const role = getActiveRole(user);
+    if (role !== 'organizer' && role !== 'admin') { window.location.href = '/dashboard'; return; }
+    currentUser = user;
+
+    await loadBalance();
+
+    document.getElementById('loading')!.classList.add('hidden');
+    document.getElementById('content')!.classList.remove('hidden');
+  }
+
+  async function loadBalance() {
+    const { data } = await supabase.from('profiles').select('points_balance').eq('id', currentUser.id).single();
+    if (data) {
+      document.getElementById('my-balance')!.textContent = data.points_balance.toLocaleString();
+    }
+  }
+
+  // ファン検索
+  document.getElementById('btn-search-fan')?.addEventListener('click', async () => {
+    const email = (document.getElementById('fan-email') as HTMLInputElement).value.trim();
+    if (!email) { alert('メールアドレスを入力してください'); return; }
+
+    const resultEl = document.getElementById('fan-result')!;
+    resultEl.classList.add('hidden');
+
+    const { data: authData } = await supabase.rpc('find_user_by_email', { search_email: email });
+
+    if (!authData || (Array.isArray(authData) && authData.length === 0)) {
+      alert('該当するアカウントが見つかりません');
+      return;
+    }
+
+    const fanProfile = Array.isArray(authData) ? authData[0] : authData;
+    selectedFanId = fanProfile.id;
+
+    document.getElementById('fan-name')!.textContent = fanProfile.nickname || '(未設定)';
+    document.getElementById('fan-email-display')!.textContent = email;
+    document.getElementById('fan-balance')!.textContent = (fanProfile.points_balance || 0).toLocaleString() + ' pt';
+
+    // 累計支出
+    const { data: spentTx } = await supabase
+      .from('point_transactions')
+      .select('amount')
+      .eq('user_id', selectedFanId)
+      .lt('amount', 0);
+    const totalSpent = (spentTx || []).reduce((sum: number, tx: any) => sum + Math.abs(tx.amount), 0);
+    document.getElementById('fan-spent')!.textContent = totalSpent.toLocaleString() + ' pt';
+
+    // 直近10件の履歴
+    const { data: history } = await supabase
+      .from('point_transactions')
+      .select('*')
+      .eq('user_id', selectedFanId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const historyEl = document.getElementById('fan-history')!;
+    if (!history || history.length === 0) {
+      historyEl.innerHTML = '<p class="text-muted">利用履歴がありません</p>';
+    } else {
+      historyEl.innerHTML = history.map((tx: any) => {
+        const date = new Date(tx.created_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const sign = tx.amount > 0 ? '+' : '';
+        const cls = tx.amount > 0 ? 'positive' : 'negative';
+        return `<div class="history-item">
+          <span class="history-date">${date}</span>
+          <span class="history-desc">${tx.description || tx.type}</span>
+          <span class="history-amount ${cls}">${sign}${tx.amount.toLocaleString()} pt</span>
+        </div>`;
+      }).join('');
+    }
+
+    resultEl.classList.remove('hidden');
+  });
+
+  // ファンへポイント付与
+  document.getElementById('btn-grant-fan')?.addEventListener('click', async () => {
+    if (!selectedFanId) return;
+
+    const amountInput = document.getElementById('fan-grant-amount') as HTMLInputElement;
+    const noteInput = document.getElementById('fan-grant-note') as HTMLInputElement;
+    const msg = document.getElementById('fan-grant-msg')!;
+    const amount = parseInt(amountInput.value);
+
+    if (!amount || amount <= 0) { showMsg(msg, 'ポイント数を入力してください', true); return; }
+    if (!confirm(`${amount.toLocaleString()} pt をファンに付与しますか？`)) return;
+
+    const btn = document.getElementById('btn-grant-fan') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '処理中...';
+
+    const { data, error } = await supabase.rpc('grant_points', {
+      target_user_id: selectedFanId,
+      amount,
+      note: noteInput.value || null,
+    });
+
+    btn.disabled = false;
+    btn.textContent = 'ポイント付与';
+
+    if (error) {
+      showMsg(msg, 'エラー: ' + error.message, true);
+      return;
+    }
+
+    amountInput.value = '';
+    noteInput.value = '';
+    showMsg(msg, `${amount.toLocaleString()} pt を付与しました`, false);
+    await loadBalance();
+    // ファン情報を再読み込み
+    document.getElementById('btn-search-fan')!.click();
+  });
+
+  function showMsg(el: HTMLElement, text: string, isError: boolean) {
+    el.textContent = text;
+    el.className = isError ? 'msg msg-error' : 'msg msg-success';
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 4000);
+  }
+
+  init();
+</script>
+
+<style>
+  .page { max-width: 800px; margin: 0 auto; }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+  .back-link:hover { color: var(--color-primary); }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+  }
+  .page-header h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+
+  .loading { text-align: center; padding: 3rem; color: var(--color-text-muted); }
+  .hidden { display: none; }
+
+  .section {
+    margin-bottom: 2rem;
+  }
+  .section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+
+  .balance-card {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border-radius: var(--radius);
+    padding: 1.5rem;
+  }
+  .balance-label { font-size: 0.85rem; opacity: 0.85; margin-bottom: 0.25rem; }
+  .balance-value { font-size: 2rem; font-weight: 700; }
+
+  .action-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .input:focus { outline: none; border-color: var(--color-primary); }
+  .input-wide { flex: 1; min-width: 200px; }
+
+  .btn-primary {
+    padding: 0.5rem 1.25rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--color-primary-dark); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    padding: 0.5rem 1.25rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-secondary:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+  .search-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .msg { font-size: 0.82rem; margin-top: 0.5rem; }
+  .msg-error { color: #dc2626; }
+  .msg-success { color: #16a34a; }
+
+  .text-muted { color: var(--color-text-muted); font-size: 0.85rem; }
+
+  /* ファン情報カード */
+  .fan-info-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .fan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .fan-name { font-size: 1.05rem; font-weight: 600; }
+  .fan-email-display { font-size: 0.8rem; color: var(--color-text-muted); }
+  .fan-stats { display: flex; gap: 1.5rem; }
+  .fan-stat { text-align: right; }
+  .fan-stat-label { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
+  .fan-stat-value { font-size: 1.1rem; font-weight: 700; }
+
+  .fan-info-card h4 { font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+  .history-list { margin-bottom: 1rem; }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.82rem;
+  }
+  .history-date { color: var(--color-text-muted); flex-shrink: 0; width: 100px; }
+  .history-desc { flex: 1; }
+  .history-amount { font-weight: 600; flex-shrink: 0; }
+  .history-amount.positive { color: #16a34a; }
+  .history-amount.negative { color: #dc2626; }
+</style>
