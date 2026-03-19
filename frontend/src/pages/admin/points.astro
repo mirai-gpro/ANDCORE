@@ -1,0 +1,532 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="ポイント管理 - ANDCORE管理">
+  <div class="page">
+    <a href="/admin" class="back-link">&larr; ANDCORE管理に戻る</a>
+
+    <div class="page-header">
+      <div>
+        <h1>ポイント管理</h1>
+        <p class="subtitle">ポイントの生成・分配</p>
+      </div>
+      <span class="badge-admin">ADMIN</span>
+    </div>
+
+    <div id="loading" class="loading">読み込み中...</div>
+    <div id="content" class="hidden">
+
+      <!-- a) 保有ポイント・生成 -->
+      <section class="section">
+        <h2>ANDCORE管理者ポイント</h2>
+        <div class="balance-card">
+          <p class="balance-label">現在の保有ポイント</p>
+          <p class="balance-value"><span id="admin-balance">0</span> pt</p>
+        </div>
+        <div class="action-row">
+          <input type="number" id="generate-amount" min="1" placeholder="生成ポイント数" class="input" />
+          <button id="btn-generate" class="btn-primary">ポイント生成</button>
+        </div>
+        <p id="generate-msg" class="msg hidden"></p>
+      </section>
+
+      <!-- b) 運営管理者への分配 -->
+      <section class="section">
+        <h2>運営管理者へのポイント分配</h2>
+        <div id="organizers-list" class="table-wrap">
+          <p class="text-muted">運営管理者がいません</p>
+        </div>
+      </section>
+
+      <!-- c) ファンへの直接付与 -->
+      <section class="section">
+        <h2>ファンへの直接ポイント付与</h2>
+        <p class="section-desc">トラブル・返金対応</p>
+        <div class="search-row">
+          <input type="email" id="fan-email" placeholder="ファンのGoogleアカウント（メール）" class="input input-wide" />
+          <button id="btn-search-fan" class="btn-secondary">検索</button>
+        </div>
+        <div id="fan-result" class="hidden">
+          <div class="fan-info-card">
+            <div class="fan-header">
+              <div>
+                <p class="fan-name" id="fan-name"></p>
+                <p class="fan-email-display" id="fan-email-display"></p>
+              </div>
+              <div class="fan-stats">
+                <div class="fan-stat">
+                  <span class="fan-stat-label">保有ポイント</span>
+                  <span class="fan-stat-value" id="fan-balance">0</span>
+                </div>
+                <div class="fan-stat">
+                  <span class="fan-stat-label">累計支出</span>
+                  <span class="fan-stat-value" id="fan-spent">0</span>
+                </div>
+              </div>
+            </div>
+            <h4>直近のポイント利用履歴</h4>
+            <div id="fan-history" class="history-list"></div>
+            <div class="action-row">
+              <input type="number" id="fan-grant-amount" min="1" placeholder="付与ポイント数" class="input" />
+              <input type="text" id="fan-grant-note" placeholder="メモ（任意）" class="input" />
+              <button id="btn-grant-fan" class="btn-primary">ポイント付与</button>
+            </div>
+            <p id="fan-grant-msg" class="msg hidden"></p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+  import { getActiveRole } from '../../lib/roles';
+
+  let currentUser: any = null;
+  let selectedFanId: string | null = null;
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = '/auth/login'; return; }
+    const role = getActiveRole(user);
+    if (role !== 'admin') { window.location.href = '/dashboard'; return; }
+    currentUser = user;
+
+    await loadAdminBalance();
+    await loadOrganizers();
+
+    document.getElementById('loading')!.classList.add('hidden');
+    document.getElementById('content')!.classList.remove('hidden');
+  }
+
+  async function loadAdminBalance() {
+    const { data } = await supabase.from('profiles').select('points_balance').eq('id', currentUser.id).single();
+    if (data) {
+      document.getElementById('admin-balance')!.textContent = data.points_balance.toLocaleString();
+    }
+  }
+
+  async function loadOrganizers() {
+    // organizer ロールを持つユーザー一覧
+    const { data: orgRoles } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'organizer');
+
+    if (!orgRoles || orgRoles.length === 0) return;
+
+    const orgIds = orgRoles.map(r => r.user_id);
+    const { data: organizers } = await supabase
+      .from('profiles')
+      .select('id, nickname, points_balance')
+      .in('id', orgIds);
+
+    if (!organizers || organizers.length === 0) return;
+
+    // 各organizerの累計支出を取得
+    const { data: spentData } = await supabase
+      .from('point_transactions')
+      .select('user_id, amount')
+      .in('user_id', orgIds)
+      .lt('amount', 0);
+
+    const spentMap: Record<string, number> = {};
+    for (const tx of (spentData || [])) {
+      spentMap[tx.user_id] = (spentMap[tx.user_id] || 0) + Math.abs(tx.amount);
+    }
+
+    const wrap = document.getElementById('organizers-list')!;
+    wrap.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>運営管理者</th>
+            <th class="num">保有ポイント</th>
+            <th class="num">累計支出</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${organizers.map(org => `
+            <tr>
+              <td>${org.nickname || '(未設定)'}</td>
+              <td class="num">${(org.points_balance || 0).toLocaleString()} pt</td>
+              <td class="num">${(spentMap[org.id] || 0).toLocaleString()} pt</td>
+              <td>
+                <div class="inline-grant">
+                  <input type="number" min="1" placeholder="pt" class="input input-sm org-grant-input" data-id="${org.id}" />
+                  <button class="btn-sm btn-primary btn-grant-org" data-id="${org.id}" data-name="${org.nickname || ''}">付与</button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // 付与ボタンのイベント
+    wrap.addEventListener('click', async (e) => {
+      const btn = (e.target as HTMLElement).closest('.btn-grant-org') as HTMLElement;
+      if (!btn) return;
+
+      const orgId = btn.dataset.id!;
+      const orgName = btn.dataset.name || '運営管理者';
+      const input = wrap.querySelector(`.org-grant-input[data-id="${orgId}"]`) as HTMLInputElement;
+      const amount = parseInt(input.value);
+
+      if (!amount || amount <= 0) { alert('ポイント数を入力してください'); return; }
+      if (!confirm(`${orgName} に ${amount.toLocaleString()} pt を付与しますか？`)) return;
+
+      btn.textContent = '処理中...';
+      (btn as HTMLButtonElement).disabled = true;
+
+      const { data, error } = await supabase.rpc('grant_points', {
+        target_user_id: orgId,
+        amount,
+        note: '管理者より分配',
+      });
+
+      if (error) {
+        alert('エラー: ' + error.message);
+        btn.textContent = '付与';
+        (btn as HTMLButtonElement).disabled = false;
+        return;
+      }
+
+      input.value = '';
+      btn.textContent = '付与';
+      (btn as HTMLButtonElement).disabled = false;
+
+      await loadAdminBalance();
+      await loadOrganizers();
+      alert(`${orgName} に ${amount.toLocaleString()} pt を付与しました`);
+    });
+  }
+
+  // ポイント生成
+  document.getElementById('btn-generate')?.addEventListener('click', async () => {
+    const input = document.getElementById('generate-amount') as HTMLInputElement;
+    const msg = document.getElementById('generate-msg')!;
+    const amount = parseInt(input.value);
+
+    if (!amount || amount <= 0) {
+      showMsg(msg, 'ポイント数を入力してください', true);
+      return;
+    }
+
+    if (!confirm(`${amount.toLocaleString()} pt を生成しますか？`)) return;
+
+    const btn = document.getElementById('btn-generate') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+
+    const { data, error } = await supabase.rpc('generate_points', { amount });
+
+    btn.disabled = false;
+    btn.textContent = 'ポイント生成';
+
+    if (error) {
+      showMsg(msg, 'エラー: ' + error.message, true);
+      return;
+    }
+
+    input.value = '';
+    showMsg(msg, `${amount.toLocaleString()} pt を生成しました`, false);
+    await loadAdminBalance();
+  });
+
+  // ファン検索
+  document.getElementById('btn-search-fan')?.addEventListener('click', async () => {
+    const email = (document.getElementById('fan-email') as HTMLInputElement).value.trim();
+    if (!email) { alert('メールアドレスを入力してください'); return; }
+
+    const resultEl = document.getElementById('fan-result')!;
+    resultEl.classList.add('hidden');
+
+    // auth.usersからメールで検索（adminはprofilesしか見れないので、emailをauth metadataから検索）
+    // Supabase client-sideではauth.admin APIは使えないので、profilesのidとauth metadataを照合
+    // 代わりに: auth.users を直接見れないので、profilesにemailがあるか確認
+    // → auth.users の email は supabase.auth.admin 経由でしか取れない
+    // → RPC経由でやるか、profilesにemail保存するか
+    // ここではpoint_transactionsとprofiles情報で対応
+    // まず auth user を email で探す
+    const { data: authData } = await supabase.rpc('find_user_by_email', { search_email: email });
+
+    if (!authData || (Array.isArray(authData) && authData.length === 0)) {
+      alert('該当するアカウントが見つかりません');
+      return;
+    }
+
+    const fanProfile = Array.isArray(authData) ? authData[0] : authData;
+    selectedFanId = fanProfile.id;
+
+    document.getElementById('fan-name')!.textContent = fanProfile.nickname || '(未設定)';
+    document.getElementById('fan-email-display')!.textContent = email;
+    document.getElementById('fan-balance')!.textContent = (fanProfile.points_balance || 0).toLocaleString() + ' pt';
+
+    // 累計支出
+    const { data: spentTx } = await supabase
+      .from('point_transactions')
+      .select('amount')
+      .eq('user_id', selectedFanId)
+      .lt('amount', 0);
+    const totalSpent = (spentTx || []).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    document.getElementById('fan-spent')!.textContent = totalSpent.toLocaleString() + ' pt';
+
+    // 直近10件の履歴
+    const { data: history } = await supabase
+      .from('point_transactions')
+      .select('*')
+      .eq('user_id', selectedFanId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const historyEl = document.getElementById('fan-history')!;
+    if (!history || history.length === 0) {
+      historyEl.innerHTML = '<p class="text-muted">利用履歴がありません</p>';
+    } else {
+      historyEl.innerHTML = history.map(tx => {
+        const date = new Date(tx.created_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const sign = tx.amount > 0 ? '+' : '';
+        const cls = tx.amount > 0 ? 'positive' : 'negative';
+        return `<div class="history-item">
+          <span class="history-date">${date}</span>
+          <span class="history-desc">${tx.description || tx.type}</span>
+          <span class="history-amount ${cls}">${sign}${tx.amount.toLocaleString()} pt</span>
+        </div>`;
+      }).join('');
+    }
+
+    resultEl.classList.remove('hidden');
+  });
+
+  // ファンへポイント付与
+  document.getElementById('btn-grant-fan')?.addEventListener('click', async () => {
+    if (!selectedFanId) return;
+
+    const amountInput = document.getElementById('fan-grant-amount') as HTMLInputElement;
+    const noteInput = document.getElementById('fan-grant-note') as HTMLInputElement;
+    const msg = document.getElementById('fan-grant-msg')!;
+    const amount = parseInt(amountInput.value);
+
+    if (!amount || amount <= 0) { showMsg(msg, 'ポイント数を入力してください', true); return; }
+    if (!confirm(`${amount.toLocaleString()} pt をファンに付与しますか？`)) return;
+
+    const btn = document.getElementById('btn-grant-fan') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '処理中...';
+
+    const { data, error } = await supabase.rpc('grant_points', {
+      target_user_id: selectedFanId,
+      amount,
+      note: noteInput.value || null,
+    });
+
+    btn.disabled = false;
+    btn.textContent = 'ポイント付与';
+
+    if (error) {
+      showMsg(msg, 'エラー: ' + error.message, true);
+      return;
+    }
+
+    amountInput.value = '';
+    noteInput.value = '';
+    showMsg(msg, `${amount.toLocaleString()} pt を付与しました`, false);
+    await loadAdminBalance();
+    // ファン情報を再読み込み
+    document.getElementById('btn-search-fan')!.click();
+  });
+
+  function showMsg(el: HTMLElement, text: string, isError: boolean) {
+    el.textContent = text;
+    el.className = isError ? 'msg msg-error' : 'msg msg-success';
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 4000);
+  }
+
+  init();
+</script>
+
+<style>
+  .page { max-width: 900px; margin: 0 auto; }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+  .back-link:hover { color: var(--color-primary); }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+  }
+  .page-header h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+
+  .badge-admin {
+    padding: 0.25rem 0.75rem;
+    background: #dc2626;
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .loading { text-align: center; padding: 3rem; color: var(--color-text-muted); }
+  .hidden { display: none; }
+
+  .section {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .section:last-child { border-bottom: none; }
+  .section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+  .section-desc { font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 1rem; }
+
+  .balance-card {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .balance-label { font-size: 0.85rem; opacity: 0.85; margin-bottom: 0.25rem; }
+  .balance-value { font-size: 2rem; font-weight: 700; }
+
+  .action-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .input:focus { outline: none; border-color: var(--color-primary); }
+  .input-wide { flex: 1; min-width: 200px; }
+  .input-sm { width: 80px; padding: 0.35rem 0.5rem; font-size: 0.8rem; }
+
+  .btn-primary {
+    padding: 0.5rem 1.25rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--color-primary-dark); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    padding: 0.5rem 1.25rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-secondary:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+  .btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .search-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .msg { font-size: 0.82rem; margin-top: 0.5rem; }
+  .msg-error { color: #dc2626; }
+  .msg-success { color: #16a34a; }
+
+  .text-muted { color: var(--color-text-muted); font-size: 0.85rem; }
+
+  /* テーブル */
+  .table-wrap { overflow-x: auto; }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .data-table th, .data-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+  }
+  .data-table th {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .data-table .num { text-align: right; }
+
+  .inline-grant {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  /* ファン情報カード */
+  .fan-info-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .fan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .fan-name { font-size: 1.05rem; font-weight: 600; }
+  .fan-email-display { font-size: 0.8rem; color: var(--color-text-muted); }
+  .fan-stats { display: flex; gap: 1.5rem; }
+  .fan-stat { text-align: right; }
+  .fan-stat-label { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
+  .fan-stat-value { font-size: 1.1rem; font-weight: 700; }
+
+  .fan-info-card h4 { font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+  .history-list { margin-bottom: 1rem; }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.82rem;
+  }
+  .history-date { color: var(--color-text-muted); flex-shrink: 0; width: 100px; }
+  .history-desc { flex: 1; }
+  .history-amount { font-weight: 600; flex-shrink: 0; }
+  .history-amount.positive { color: #16a34a; }
+  .history-amount.negative { color: #dc2626; }
+</style>
