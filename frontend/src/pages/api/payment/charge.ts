@@ -22,7 +22,7 @@ export const POST: APIRoute = async ({ request }) => {
     const orderId = generateOrderId();
 
     // 注文レコードを作成
-    const { data, error } = await supabase.table('payment_orders').insert({
+    const { data, error } = await supabase.from('payment_orders').insert({
       user_id,
       order_type: 'point_charge',
       status: 'pending',

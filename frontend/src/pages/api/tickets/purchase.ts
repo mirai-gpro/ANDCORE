@@ -25,10 +25,10 @@ export const POST: APIRoute = async ({ request }) => {
     // 仮押さえを取得・検証
     const { data: hold, error: holdError } = await supabase
       .from('ticket_holds')
-      .select('*, ticket_hold_items(*)')
+      .select('*, ticket_hold_items:ticket_hold_items!ticket_hold_items_ticket_hold_id_fkey(*)')
       .eq('id', hold_id)
       .eq('user_id', user_id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (holdError || !hold) {
       return new Response(JSON.stringify({ detail: '仮押さえが見つかりません' }), {

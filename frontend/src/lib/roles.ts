@@ -104,7 +104,7 @@ export async function switchRole(newRole: string): Promise<boolean> {
     // RPC未作成時のフォールバック: profiles.role を直接更新
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await supabase.from('profiles').update({ role: newRole }).eq('id', user.id);
+      await supabase.from('profiles').update({ role: newRole as import('./database.types').UserRole }).eq('id', user.id);
     }
   }
 

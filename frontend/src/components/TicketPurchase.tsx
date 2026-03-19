@@ -26,7 +26,7 @@ interface SlotMember {
 
 interface TicketProduct {
   id: string;
-  event_slot_member_id: string;
+  event_slot_member_id: string | null;
   ticket_type: string;
   price: number;
   stock_limit: number | null;
