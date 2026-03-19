@@ -34,7 +34,7 @@ export const ROLE_DASHBOARDS: Record<string, string> = {
   fan: '/dashboard',
   idol: '/idol',
   organizer: '/manage',
-  admin: '/dashboard',
+  admin: '/admin',
 };
 
 /**

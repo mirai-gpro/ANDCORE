@@ -67,6 +67,11 @@ import Layout from '../../layouts/Layout.astro';
           <h3>システム設定</h3>
           <p>ポイントレート・手数料・利用規約</p>
         </a>
+        <a href="/admin/admins" class="menu-card menu-card-admin">
+          <div class="menu-icon">🔑</div>
+          <h3>管理者管理</h3>
+          <p>ANDCORE管理者の追加・削除</p>
+        </a>
         <a href="/admin/audit" class="menu-card">
           <div class="menu-icon">📋</div>
           <h3>監査ログ</h3>
@@ -87,7 +92,7 @@ import Layout from '../../layouts/Layout.astro';
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      window.location.href = '/auth/login';
+      window.location.href = '/admin/login';
       return;
     }
 
@@ -245,4 +250,13 @@ import Layout from '../../layouts/Layout.astro';
     color: var(--color-text);
   }
   .btn-logout:hover { border-color: #dc2626; color: #dc2626; }
+
+  .menu-card-admin {
+    border-color: #fecaca;
+    background: #fffbfb;
+  }
+  .menu-card-admin:hover {
+    border-color: #dc2626;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);
+  }
 </style>

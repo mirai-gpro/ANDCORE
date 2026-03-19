@@ -1,0 +1,317 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="管理者管理 - ANDCORE管理">
+  <div class="page">
+    <a href="/admin" class="back-link">&larr; ANDCORE管理に戻る</a>
+
+    <div class="page-header">
+      <div>
+        <h1>管理者管理</h1>
+        <p class="subtitle">ANDCORE管理者の追加・削除</p>
+      </div>
+      <span class="badge-admin">ADMIN</span>
+    </div>
+
+    <div id="loading" class="loading">読み込み中...</div>
+    <div id="content" class="hidden">
+
+      <!-- 管理者追加 -->
+      <section class="section">
+        <h2>管理者を追加</h2>
+        <p class="section-desc">追加したいユーザーのGoogleアカウント（メールアドレス）を入力してください。対象ユーザーは事前にANDCOREにログイン済みである必要があります。</p>
+        <div class="add-row">
+          <input type="email" id="add-email" placeholder="example@gmail.com" class="input input-wide" />
+          <button id="btn-add-admin" class="btn-primary">管理者に追加</button>
+        </div>
+        <p id="add-msg" class="msg hidden"></p>
+      </section>
+
+      <!-- 管理者一覧 -->
+      <section class="section">
+        <h2>管理者一覧</h2>
+        <div id="admins-list" class="table-wrap">
+          <p class="text-muted">読み込み中...</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+  import { getActiveRole } from '../../lib/roles';
+
+  let currentUser: any = null;
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = '/admin/login'; return; }
+    const role = getActiveRole(user);
+    if (role !== 'admin') { window.location.href = '/dashboard'; return; }
+    currentUser = user;
+
+    await loadAdmins();
+
+    document.getElementById('loading')!.classList.add('hidden');
+    document.getElementById('content')!.classList.remove('hidden');
+  }
+
+  async function loadAdmins() {
+    const { data, error } = await supabase.rpc('list_admins');
+    const wrap = document.getElementById('admins-list')!;
+
+    if (error) {
+      wrap.innerHTML = `<p class="text-error">エラー: ${error.message}</p>`;
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      wrap.innerHTML = '<p class="text-muted">管理者がいません</p>';
+      return;
+    }
+
+    wrap.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>メールアドレス</th>
+            <th>ニックネーム</th>
+            <th>追加日</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.map((admin: any) => {
+            const isCurrentUser = admin.id === currentUser.id;
+            const date = new Date(admin.created_at).toLocaleDateString('ja-JP', {
+              year: 'numeric', month: 'short', day: 'numeric'
+            });
+            return `
+              <tr>
+                <td>
+                  <span class="admin-email">${admin.email}</span>
+                  ${isCurrentUser ? '<span class="badge-self">自分</span>' : ''}
+                </td>
+                <td>${admin.nickname || '(未設定)'}</td>
+                <td class="date-cell">${date}</td>
+                <td>
+                  ${isCurrentUser
+                    ? '<span class="text-muted-sm">削除不可</span>'
+                    : `<button class="btn-sm btn-danger btn-remove-admin" data-email="${admin.email}" data-name="${admin.nickname || admin.email}">削除</button>`
+                  }
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // 削除ボタンのイベント
+    wrap.querySelectorAll('.btn-remove-admin').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const email = (btn as HTMLElement).dataset.email!;
+        const name = (btn as HTMLElement).dataset.name!;
+
+        if (!confirm(`${name} の管理者権限を削除しますか？\n\nメール: ${email}`)) return;
+
+        (btn as HTMLButtonElement).disabled = true;
+        (btn as HTMLButtonElement).textContent = '処理中...';
+
+        const { error } = await supabase.rpc('revoke_admin_by_email', { target_email: email });
+
+        if (error) {
+          alert('エラー: ' + error.message);
+          (btn as HTMLButtonElement).disabled = false;
+          (btn as HTMLButtonElement).textContent = '削除';
+          return;
+        }
+
+        alert(`${name} の管理者権限を削除しました`);
+        await loadAdmins();
+      });
+    });
+  }
+
+  // 管理者追加
+  document.getElementById('btn-add-admin')?.addEventListener('click', async () => {
+    const input = document.getElementById('add-email') as HTMLInputElement;
+    const msg = document.getElementById('add-msg')!;
+    const email = input.value.trim();
+
+    if (!email) {
+      showMsg(msg, 'メールアドレスを入力してください', true);
+      return;
+    }
+
+    if (!confirm(`${email} を管理者に追加しますか？`)) return;
+
+    const btn = document.getElementById('btn-add-admin') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '追加中...';
+
+    const { error } = await supabase.rpc('grant_admin_by_email', { target_email: email });
+
+    btn.disabled = false;
+    btn.textContent = '管理者に追加';
+
+    if (error) {
+      showMsg(msg, 'エラー: ' + error.message, true);
+      return;
+    }
+
+    input.value = '';
+    showMsg(msg, `${email} を管理者に追加しました`, false);
+    await loadAdmins();
+  });
+
+  function showMsg(el: HTMLElement, text: string, isError: boolean) {
+    el.textContent = text;
+    el.className = isError ? 'msg msg-error' : 'msg msg-success';
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 5000);
+  }
+
+  init();
+</script>
+
+<style>
+  .page { max-width: 900px; margin: 0 auto; }
+
+  .back-link {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+  .back-link:hover { color: var(--color-primary); }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+  }
+  .page-header h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+
+  .badge-admin {
+    padding: 0.25rem 0.75rem;
+    background: #dc2626;
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .loading { text-align: center; padding: 3rem; color: var(--color-text-muted); }
+  .hidden { display: none; }
+
+  .section {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .section:last-child { border-bottom: none; }
+  .section h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+  .section-desc { font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 1rem; line-height: 1.5; }
+
+  .add-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .input:focus { outline: none; border-color: var(--color-primary); }
+  .input-wide { flex: 1; min-width: 240px; }
+
+  .btn-primary {
+    padding: 0.5rem 1.25rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--color-primary-dark); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 600;
+    border: none;
+  }
+
+  .btn-danger {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+  .btn-danger:hover { background: #dc2626; color: white; }
+  .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .msg { font-size: 0.82rem; margin-top: 0.5rem; }
+  .msg-error { color: #dc2626; }
+  .msg-success { color: #16a34a; }
+
+  .text-muted { color: var(--color-text-muted); font-size: 0.85rem; }
+  .text-muted-sm { color: var(--color-text-muted); font-size: 0.75rem; }
+  .text-error { color: #dc2626; font-size: 0.85rem; }
+
+  /* テーブル */
+  .table-wrap { overflow-x: auto; }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .data-table th, .data-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+  }
+  .data-table th {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .admin-email {
+    font-weight: 500;
+  }
+
+  .badge-self {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.4rem;
+    background: #dbeafe;
+    color: #2563eb;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .date-cell {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+</style>

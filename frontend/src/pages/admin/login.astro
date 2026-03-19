@@ -1,0 +1,294 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="ANDCORE管理者ログイン">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="admin-header">
+        <span class="badge-admin">ADMIN</span>
+        <h1>ANDCORE管理者ログイン</h1>
+        <p class="auth-subtitle">管理者アカウントでログインしてください</p>
+      </div>
+
+      <div id="auth-message" class="message hidden"></div>
+
+      <div class="google-btn-wrapper">
+        <div id="google-signin-btn"></div>
+      </div>
+
+      <div class="divider">
+        <span>または</span>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <div class="form-group">
+          <label for="email">メールアドレス</label>
+          <input type="email" id="email" name="email" required placeholder="admin@example.com" />
+        </div>
+        <div class="form-group">
+          <label for="password">パスワード</label>
+          <input type="password" id="password" name="password" required placeholder="パスワードを入力" />
+        </div>
+        <button type="submit" class="btn btn-admin btn-full">管理者ログイン</button>
+      </form>
+
+      <p class="auth-footer">
+        <a href="/auth/login">通常のログインはこちら</a>
+      </p>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  const messageEl = document.getElementById('auth-message') as HTMLDivElement;
+
+  function showMessage(text: string, isError = false) {
+    messageEl.textContent = text;
+    messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
+  }
+
+  async function checkAdminAndRedirect(user: any) {
+    // user_roles テーブルで admin 権限を確認
+    const { data: roles } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin');
+
+    if (!roles || roles.length === 0) {
+      showMessage('管理者権限がありません。管理者に連絡してください。', true);
+      await supabase.auth.signOut();
+      return;
+    }
+
+    // active_role を admin にセット
+    localStorage.setItem('active_role', 'admin');
+
+    // profiles.role も admin に更新
+    await supabase.rpc('switch_role', { new_role: 'admin' });
+
+    showMessage('ログインしました。リダイレクト中...');
+    window.location.href = '/admin';
+  }
+
+  // Google credential callback
+  async function handleGoogleCredential(response: { credential: string }) {
+    showMessage('Googleアカウントで認証中...');
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: response.credential,
+    });
+
+    if (error) {
+      showMessage('Google認証に失敗しました: ' + error.message, true);
+    } else if (!data.session) {
+      showMessage('セッションの取得に失敗しました。', true);
+    } else {
+      await checkAdminAndRedirect(data.session.user);
+    }
+  }
+
+  // Programmatic GSI initialization
+  function initGoogleSignIn() {
+    const g = (window as any).google;
+    if (!g?.accounts?.id) {
+      setTimeout(initGoogleSignIn, 100);
+      return;
+    }
+    g.accounts.id.initialize({
+      client_id: import.meta.env.PUBLIC_GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+      auto_select: false,
+      itp_support: true,
+    });
+    g.accounts.id.renderButton(
+      document.getElementById('google-signin-btn'),
+      { type: 'standard', shape: 'rectangular', theme: 'outline', text: 'signin_with', size: 'large', logo_alignment: 'left', width: 360, locale: 'ja' },
+    );
+  }
+  initGoogleSignIn();
+
+  // Email/Password login
+  const form = document.getElementById('login-form') as HTMLFormElement;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const password = (document.getElementById('password') as HTMLInputElement).value;
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      showMessage(error.message, true);
+    } else if (data.session) {
+      await checkAdminAndRedirect(data.session.user);
+    }
+  });
+
+  // 既にログイン中ならチェック
+  (async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin');
+      if (roles && roles.length > 0) {
+        localStorage.setItem('active_role', 'admin');
+        window.location.href = '/admin';
+      }
+    }
+  })();
+</script>
+
+<style>
+  .auth-container {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 0;
+  }
+
+  .auth-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow);
+  }
+
+  .admin-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .badge-admin {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #dc2626;
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+  }
+
+  .auth-card h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .auth-subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .google-btn-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1rem 0;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
+  }
+
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .form-group input {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus {
+    border-color: #dc2626;
+  }
+
+  .btn-full {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-admin {
+    background: #dc2626;
+    color: white;
+  }
+
+  .btn-admin:hover {
+    background: #b91c1c;
+  }
+
+  .auth-footer {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .message {
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .message-error {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+
+  .message-success {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+  }
+
+  .hidden {
+    display: none;
+  }
+</style>
