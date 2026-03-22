@@ -40,6 +40,13 @@ export const ROLE_DASHBOARDS: Record<string, string> = {
   admin: '/admin',
 };
 
+export const ROLE_MYPAGE: Record<string, string> = {
+  fan: '/dashboard',
+  idol: '/idol',
+  organizer: '/manage',
+  admin: '/admin',
+};
+
 /**
  * アクティブロールを取得する
  * localStorage > profiles.role > user_metadata.role の優先順

@@ -51,7 +51,7 @@ const { title } = Astro.props;
     </footer>
     <script>
       import { supabase } from '../lib/supabase';
-      import { getActiveRole, getUserRoles, switchRole, ROLE_LABELS, ROLE_COLORS, ROLE_DASHBOARDS } from '../lib/roles';
+      import { getActiveRole, getUserRoles, switchRole, ROLE_LABELS, ROLE_COLORS, ROLE_DASHBOARDS, ROLE_MYPAGE } from '../lib/roles';
 
       async function updateNav() {
         const navLinks = document.getElementById('nav-links');
@@ -101,7 +101,7 @@ const { title } = Astro.props;
           }
 
           // ロール別にマイページのリンク先を設定
-          if (navMypageLink) navMypageLink.href = ROLE_DASHBOARDS[role] || '/dashboard';
+          if (navMypageLink) navMypageLink.href = ROLE_MYPAGE[role] || '/dashboard';
 
           // ロールリストをドロップダウンに表示
           if (navRoleList) {
