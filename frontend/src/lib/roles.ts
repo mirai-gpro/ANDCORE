@@ -34,7 +34,7 @@ export const ROLE_COLORS: Record<string, string> = {
 };
 
 export const ROLE_DASHBOARDS: Record<string, string> = {
-  fan: '/dashboard',
+  fan: '/events',
   idol: '/idol',
   organizer: '/manage',
   admin: '/admin',
