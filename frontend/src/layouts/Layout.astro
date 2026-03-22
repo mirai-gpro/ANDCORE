@@ -128,8 +128,10 @@ const { title } = Astro.props;
             });
           }
 
-          // ログイン後は「運営者様ページ」を非表示にする
-          if (navBiz) navBiz.style.display = 'none';
+          // ログイン後：organizer/admin は運営管理メニューがあるため非表示、fan/idol には表示を維持
+          if (navBiz && (role === 'organizer' || role === 'admin')) {
+            navBiz.style.display = 'none';
+          }
 
           // ロール別ナビリンク追加
           if (role === 'idol') {

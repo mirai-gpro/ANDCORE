@@ -1,5 +1,8 @@
 import { supabase } from './supabase';
 
+// マイグレーション未適用時のフォールバック用管理者メールアドレス
+const ADMIN_EMAILS = ['unfix.hamada@gmail.com'];
+
 export const ROLE_LABELS: Record<string, string> = {
   fan: 'ファン',
   idol: 'アイドルメンバー',
@@ -31,7 +34,7 @@ export const ROLE_COLORS: Record<string, string> = {
 };
 
 export const ROLE_DASHBOARDS: Record<string, string> = {
-  fan: '/dashboard',
+  fan: '/events',
   idol: '/idol',
   organizer: '/manage',
   admin: '/admin',
@@ -83,6 +86,13 @@ export async function getUserRoles(userId: string): Promise<string[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (user?.user_metadata?.role) {
     for (const r of expandRoles(user.user_metadata.role)) {
+      roles.add(r);
+    }
+  }
+
+  // 4. 管理者メールアドレスによるフォールバック（user_rolesテーブル未設定時の救済）
+  if (user?.email && ADMIN_EMAILS.includes(user.email)) {
+    for (const r of expandRoles('admin')) {
       roles.add(r);
     }
   }
