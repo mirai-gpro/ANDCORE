@@ -123,6 +123,25 @@ import Layout from '../../../layouts/Layout.astro';
   let slotIndex = 0;
   let createdEventId: string | null = null; // リトライ時の重複防止
   let idolGroups: { id: string; name: string; photo_url: string | null }[] = [];
+
+  // 時間select用のオプション生成
+  function hourOptions(selected: string = '00'): string {
+    return Array.from({ length: 24 }, (_, i) => {
+      const v = String(i).padStart(2, '0');
+      return `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+    }).join('');
+  }
+  function minuteOptions(selected: string = '00'): string {
+    return [0, 10, 20, 30, 40, 50].map(m => {
+      const v = String(m).padStart(2, '0');
+      return `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+    }).join('');
+  }
+  function getTimeFromSelects(container: Element, prefix: string): string {
+    const h = (container.querySelector(`.${prefix}-hour`) as HTMLSelectElement).value;
+    const m = (container.querySelector(`.${prefix}-minute`) as HTMLSelectElement).value;
+    return `${h}:${m}`;
+  }
   // 選択グループのメンバー一覧
   let groupMembers: { id: string; name: string; group_id: string; group_name: string }[] = [];
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
@@ -217,11 +236,21 @@ import Layout from '../../../layouts/Layout.astro';
       <div class="sale-period-group">
         <div class="form-group">
           <label>販売開始日時</label>
-          <input type="datetime-local" class="sale-start-input" data-idx="${idx}" value="${saleStartAt || ''}" />
+          <input type="date" class="sale-start-date" data-idx="${idx}" value="${saleStartAt ? saleStartAt.split('T')[0] : ''}" />
+          <div class="time-select-group">
+            <select class="sale-start-hour" data-idx="${idx}">${hourOptions(saleStartAt ? saleStartAt.split('T')[1]?.split(':')[0] || '00' : '00')}</select>
+            <span class="time-colon">:</span>
+            <select class="sale-start-minute" data-idx="${idx}">${minuteOptions(saleStartAt ? saleStartAt.split('T')[1]?.split(':')[1] || '00' : '00')}</select>
+          </div>
         </div>
         <div class="form-group">
           <label>販売終了日時</label>
-          <input type="datetime-local" class="sale-end-input" data-idx="${idx}" value="${saleEndAt || ''}" />
+          <input type="date" class="sale-end-date" data-idx="${idx}" value="${saleEndAt ? saleEndAt.split('T')[0] : ''}" />
+          <div class="time-select-group">
+            <select class="sale-end-hour" data-idx="${idx}">${hourOptions(saleEndAt ? saleEndAt.split('T')[1]?.split(':')[0] || '00' : '00')}</select>
+            <span class="time-colon">:</span>
+            <select class="sale-end-minute" data-idx="${idx}">${minuteOptions(saleEndAt ? saleEndAt.split('T')[1]?.split(':')[1] || '00' : '00')}</select>
+          </div>
         </div>
       </div>
       <div class="slots-container" data-idx="${idx}"></div>
@@ -242,16 +271,28 @@ import Layout from '../../../layouts/Layout.astro';
     const slotDiv = document.createElement('div');
     slotDiv.className = 'slot-row';
     slotDiv.dataset.slotIdx = String(sid);
+    const stH = startTime ? startTime.split(':')[0] : '00';
+    const stM = startTime ? startTime.split(':')[1] : '00';
+    const dtH = doorTime ? doorTime.split(':')[0] : '00';
+    const dtM = doorTime ? doorTime.split(':')[1] : '00';
     slotDiv.innerHTML = `
       <div class="slot-top">
         <div class="slot-fields">
           <div class="form-group">
-            <label>開始時間 <span class="required">*</span></label>
-            <input type="time" class="start-time" required step="300" value="${startTime || ''}" />
+            <label>開演 <span class="required">*</span></label>
+            <div class="time-select-group">
+              <select class="start-hour">${hourOptions(stH)}</select>
+              <span class="time-colon">:</span>
+              <select class="start-minute">${minuteOptions(stM)}</select>
+            </div>
           </div>
           <div class="form-group">
-            <label>開場時間</label>
-            <input type="time" class="door-time" step="300" value="${doorTime || ''}" />
+            <label>開場</label>
+            <div class="time-select-group">
+              <select class="door-hour">${hourOptions(dtH)}</select>
+              <span class="time-colon">:</span>
+              <select class="door-minute">${minuteOptions(dtM)}</select>
+            </div>
           </div>
         </div>
         <button type="button" class="btn-remove-slot">&times;</button>
@@ -269,19 +310,21 @@ import Layout from '../../../layouts/Layout.astro';
     `;
     container.appendChild(slotDiv);
 
-    // 開始時間→開場時間自動設定
-    const startInput = slotDiv.querySelector('.start-time') as HTMLInputElement;
-    const doorInput = slotDiv.querySelector('.door-time') as HTMLInputElement;
-    startInput.addEventListener('change', () => {
-      if (startInput.value && !doorInput.value) {
-        const [h, m] = startInput.value.split(':').map(Number);
-        const totalMin = h * 60 + m - 30;
+    // 開演→開場自動設定（開演変更時、開場がデフォルト00:00のままなら30分前をセット）
+    const startHourSel = slotDiv.querySelector('.start-hour') as HTMLSelectElement;
+    const startMinSel = slotDiv.querySelector('.start-minute') as HTMLSelectElement;
+    const doorHourSel = slotDiv.querySelector('.door-hour') as HTMLSelectElement;
+    const doorMinSel = slotDiv.querySelector('.door-minute') as HTMLSelectElement;
+    let doorTouched = !!doorTime;
+    [doorHourSel, doorMinSel].forEach(el => el.addEventListener('change', () => { doorTouched = true; }));
+    [startHourSel, startMinSel].forEach(el => el.addEventListener('change', () => {
+      if (!doorTouched) {
+        const totalMin = Number(startHourSel.value) * 60 + Number(startMinSel.value) - 30;
         const adjMin = totalMin < 0 ? totalMin + 24 * 60 : totalMin;
-        const dh = String(Math.floor(adjMin / 60)).padStart(2, '0');
-        const dm = String(adjMin % 60).padStart(2, '0');
-        doorInput.value = `${dh}:${dm}`;
+        doorHourSel.value = String(Math.floor(adjMin / 60)).padStart(2, '0');
+        doorMinSel.value = String(Math.floor((adjMin % 60) / 10) * 10).padStart(2, '0');
       }
-    });
+    }));
   }
 
   // メンバー追加
@@ -504,17 +547,20 @@ import Layout from '../../../layouts/Layout.astro';
       const dateInput = row.querySelector('.date-input') as HTMLInputElement;
       if (!dateInput.value) { showMessage('開催日を入力してください。', true); return; }
 
-      const saleStartInput = row.querySelector('.sale-start-input') as HTMLInputElement;
-      const saleEndInput = row.querySelector('.sale-end-input') as HTMLInputElement;
-      const saleStartAt = saleStartInput?.value ? new Date(saleStartInput.value).toISOString() : null;
-      const saleEndAt = saleEndInput?.value ? new Date(saleEndInput.value).toISOString() : null;
+      const saleStartDate = (row.querySelector('.sale-start-date') as HTMLInputElement)?.value;
+      const saleStartH = (row.querySelector('.sale-start-hour') as HTMLSelectElement)?.value || '00';
+      const saleStartM = (row.querySelector('.sale-start-minute') as HTMLSelectElement)?.value || '00';
+      const saleStartAt = saleStartDate ? new Date(`${saleStartDate}T${saleStartH}:${saleStartM}`).toISOString() : null;
+      const saleEndDate = (row.querySelector('.sale-end-date') as HTMLInputElement)?.value;
+      const saleEndH = (row.querySelector('.sale-end-hour') as HTMLSelectElement)?.value || '00';
+      const saleEndM = (row.querySelector('.sale-end-minute') as HTMLSelectElement)?.value || '00';
+      const saleEndAt = saleEndDate ? new Date(`${saleEndDate}T${saleEndH}:${saleEndM}`).toISOString() : null;
 
       const slotsColl: SlotCollected[] = [];
       const slotRows = row.querySelectorAll('.slot-row');
       for (const slotRow of slotRows) {
-        const startTime = (slotRow.querySelector('.start-time') as HTMLInputElement).value;
-        const doorTime = (slotRow.querySelector('.door-time') as HTMLInputElement).value;
-        if (!startTime) { showMessage('開始時間を入力してください。', true); return; }
+        const startTime = getTimeFromSelects(slotRow, 'start');
+        const doorTime = getTimeFromSelects(slotRow, 'door');
 
         // メンバー収集
         const members: MemberData[] = [];
@@ -558,6 +604,11 @@ import Layout from '../../../layouts/Layout.astro';
       if (imageFile) {
         const path = `events/${currentUser.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
         imageUrl = await uploadImage(imageFile, path);
+        if (!imageUrl) {
+          showMessage('画像のアップロードに失敗しました。Storageバケットの設定を確認してください。', true);
+          submitBtn.disabled = false;
+          return;
+        }
       }
 
       // performers表示用テキスト
@@ -793,6 +844,18 @@ import Layout from '../../../layouts/Layout.astro';
 
   .checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
   .price-row { flex-direction: row; }
+
+  /* 時間セレクト */
+  .time-select-group {
+    display: flex; align-items: center; gap: 0.25rem;
+  }
+  .time-select-group select {
+    padding: 0.5rem 0.5rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.9rem; font-family: inherit;
+    outline: none; background: white; cursor: pointer;
+  }
+  .time-select-group select:focus { border-color: var(--color-primary); }
+  .time-colon { font-weight: 700; font-size: 1rem; color: var(--color-text-muted); }
 
   /* 販売期間 */
   .sale-period-group { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }

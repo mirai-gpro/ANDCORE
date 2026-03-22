@@ -39,7 +39,7 @@ export const POST: APIRoute = async ({ request }) => {
     const orderId = generateOrderId();
 
     // 注文レコードを作成
-    const { error } = await supabase.table('payment_orders').insert({
+    const { error } = await supabase.from('payment_orders').insert({
       user_id,
       order_type: 'ticket_purchase',
       status: 'pending',

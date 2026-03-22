@@ -2,259 +2,512 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="ホーム">
-  <section class="hero">
-    <h1><img src="/images/andcore_logo.png" alt="アンコール" class="hero-logo" /></h1>
-    <p class="subtitle">特典会をもっと特別な体験に</p>
-    <p class="description">
-      デジタルチケット、写真撮影、推し活ランキング。<br />
-      ファンとアイドルをつなぐ、新しい特典会のカタチ。
-    </p>
-    <div class="cta-group">
-      <a href="/auth/register" class="btn btn-primary">新規登録</a>
-      <a href="/events" class="btn btn-secondary">イベントを見る</a>
-    </div>
-  </section>
+<Layout title="イベントを探す">
+  <div class="ev-page">
+    <!-- ヒーロー -->
+    <section class="ev-hero">
+      <h1 class="ev-hero-title">イベントを探す</h1>
+      <p class="ev-hero-sub">気になるイベントを見つけて、チケットを購入しよう</p>
+      <div class="ev-search-bar">
+        <input type="text" id="search-input" class="ev-search-input" placeholder="イベント名・出演者で検索..." />
+      </div>
+    </section>
 
-  <section class="features">
-    <div class="feature-card">
-      <h3>デジタルチケット</h3>
-      <p>ポイントを使ってチケットを購入。QRコードでスムーズに入場。</p>
-    </div>
-    <div class="feature-card">
-      <h3>写真撮影</h3>
-      <p>ブラウザから直接撮影。高画質な思い出を自動でアルバムに保存。</p>
-    </div>
-    <div class="feature-card">
-      <h3>推し活ランキング</h3>
-      <p>あなたの推し活を可視化。ランクアップで特別な体験をアンロック。</p>
-    </div>
-  </section>
+    <!-- 並び替え・フィルター -->
+    <section class="ev-controls">
+      <div class="ev-sort">
+        <button class="ev-sort-btn active" data-sort="date">開催日順</button>
+        <button class="ev-sort-btn" data-sort="new">新着順</button>
+      </div>
+      <div class="ev-filters">
+        <label class="ev-filter-check">
+          <input type="checkbox" id="include-ended" />
+          販売終了も表示
+        </label>
+        <label class="ev-filter-check">
+          <input type="checkbox" id="include-past" />
+          開催終了も表示
+        </label>
+      </div>
+    </section>
 
-  <section class="pwa-install">
-    <h2>アプリとして使う</h2>
-    <p class="pwa-description">ホーム画面に追加すると、アプリのようにすぐアクセスできます。</p>
-
-    <div class="pwa-tabs">
-      <button class="pwa-tab active" data-tab="iphone">iPhone</button>
-      <button class="pwa-tab" data-tab="android">Android</button>
-    </div>
-
-    <div class="pwa-content" id="pwa-iphone">
-      <ol class="pwa-steps">
-        <li><strong>Safari</strong> でこのページを開く</li>
-        <li>画面下の <strong>共有ボタン（↑）</strong> をタップ</li>
-        <li><strong>「ホーム画面に追加」</strong> をタップ</li>
-        <li><strong>「追加」</strong> をタップして完了</li>
-      </ol>
+    <!-- イベントグリッド -->
+    <div id="events-grid" class="ev-grid">
+      <div class="ev-loading">
+        <div class="ev-loading-spinner"></div>
+        <p>イベントを読み込み中...</p>
+      </div>
     </div>
 
-    <div class="pwa-content hidden" id="pwa-android">
-      <ol class="pwa-steps">
-        <li><strong>Chrome</strong> でこのページを開く</li>
-        <li>右上の <strong>メニュー（⋮）</strong> をタップ</li>
-        <li><strong>「ホーム画面に追加」</strong> または <strong>「アプリをインストール」</strong> をタップ</li>
-        <li><strong>「インストール」</strong> をタップして完了</li>
-      </ol>
+    <div id="no-events" class="ev-empty hidden">
+      <div class="ev-empty-icon">📭</div>
+      <p>現在予定されているイベントはありません</p>
     </div>
-  </section>
+  </div>
 </Layout>
 
+<script>
+  import { supabase } from '../lib/supabase';
+
+  let allEvents: any[] = [];
+  let currentSort = 'date';
+  let showEnded = false;
+  let showPast = false;
+  let searchQuery = '';
+
+  async function loadEvents() {
+    const gridEl = document.getElementById('events-grid')!;
+    const emptyEl = document.getElementById('no-events')!;
+
+    const { data: events, error } = await supabase
+      .from('events')
+      .select('*, event_dates(event_date, sale_start_at, sale_end_at)')
+      .in('status', ['scheduled', 'active'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      gridEl.innerHTML = `<p class="ev-error">イベントの取得に失敗しました</p>`;
+      return;
+    }
+
+    if (!events || events.length === 0) {
+      gridEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    const now = new Date();
+    allEvents = events.map(event => {
+      const dates = (event.event_dates as any[]) || [];
+      const sortedDates = dates.map(d => d.event_date).filter(Boolean).sort();
+
+      let saleStatus: 'none' | 'before' | 'on_sale' | 'ended' = 'none';
+      let earliestSaleStart: string | null = null;
+      let latestSaleEnd: string | null = null;
+
+      for (const d of dates) {
+        if (d.sale_start_at && (!earliestSaleStart || d.sale_start_at < earliestSaleStart)) earliestSaleStart = d.sale_start_at;
+        if (d.sale_end_at && (!latestSaleEnd || d.sale_end_at > latestSaleEnd)) latestSaleEnd = d.sale_end_at;
+      }
+
+      const hasSalePeriod = dates.some((d: any) => d.sale_start_at || d.sale_end_at);
+      if (hasSalePeriod) {
+        const anyOnSale = dates.some((d: any) => {
+          const start = d.sale_start_at ? new Date(d.sale_start_at) : null;
+          const end = d.sale_end_at ? new Date(d.sale_end_at) : null;
+          return (!start || start <= now) && (!end || now <= end);
+        });
+        if (anyOnSale) saleStatus = 'on_sale';
+        else if (earliestSaleStart && new Date(earliestSaleStart) > now) saleStatus = 'before';
+        else saleStatus = 'ended';
+      }
+
+      // 開催終了判定: 全日程が過去
+      const lastDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null;
+      const eventFinished = lastDate ? new Date(lastDate + 'T23:59:59') < now : false;
+
+      return {
+        ...event,
+        firstDate: sortedDates[0] || null,
+        allDates: sortedDates,
+        saleStatus,
+        earliestSaleStart,
+        latestSaleEnd,
+        eventFinished,
+      };
+    });
+
+    renderEvents();
+  }
+
+  function renderEvents() {
+    const gridEl = document.getElementById('events-grid')!;
+    const emptyEl = document.getElementById('no-events')!;
+
+    let filtered = allEvents;
+
+    // 検索フィルター
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(e =>
+        (e.title || '').toLowerCase().includes(q) ||
+        (e.performers || '').toLowerCase().includes(q) ||
+        (e.subtitle || '').toLowerCase().includes(q)
+      );
+    }
+
+    // 販売終了フィルター
+    if (!showEnded) {
+      filtered = filtered.filter(e => e.saleStatus !== 'ended');
+    }
+
+    // 開催終了フィルター
+    if (!showPast) {
+      filtered = filtered.filter(e => !e.eventFinished);
+    }
+
+    // ソート
+    if (currentSort === 'date') {
+      filtered.sort((a, b) => {
+        if (!a.firstDate && !b.firstDate) return 0;
+        if (!a.firstDate) return 1;
+        if (!b.firstDate) return -1;
+        return a.firstDate.localeCompare(b.firstDate);
+      });
+    } else {
+      filtered.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+
+    if (filtered.length === 0) {
+      gridEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    gridEl.innerHTML = filtered.map(event => {
+      const dateText = event.allDates.length > 0
+        ? event.allDates.map((d: string) => {
+            const dt = new Date(d);
+            return dt.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' });
+          }).join(' / ')
+        : '日程未定';
+
+      let badgeHtml = '';
+      if (event.eventFinished) {
+        badgeHtml = '<span class="ev-badge ev-badge-finished">開催終了</span>';
+      } else if (event.saleStatus === 'on_sale') {
+        badgeHtml = '<span class="ev-badge ev-badge-on">販売中</span>';
+      } else if (event.saleStatus === 'before') {
+        badgeHtml = '<span class="ev-badge ev-badge-before">販売前</span>';
+      } else if (event.saleStatus === 'ended') {
+        badgeHtml = '<span class="ev-badge ev-badge-ended">販売終了</span>';
+      }
+
+      const img = event.image_url
+        ? `<img src="${event.image_url}" alt="" class="ev-card-img" loading="lazy" />`
+        : '<div class="ev-card-img ev-card-img-empty"><span>NO IMAGE</span></div>';
+
+      const venue = event.venue_name
+        ? `<div class="ev-card-venue">${event.venue_name}</div>`
+        : '';
+
+      const performers = event.performers
+        ? `<div class="ev-card-performers">${event.performers}</div>`
+        : '';
+
+      return `
+        <a href="/events/${event.id}/tickets" class="ev-card">
+          <div class="ev-card-img-wrap">
+            ${img}
+            ${badgeHtml ? `<div class="ev-card-badge-wrap">${badgeHtml}</div>` : ''}
+          </div>
+          <div class="ev-card-body">
+            <h3 class="ev-card-title">${event.title}</h3>
+            ${performers}
+            <div class="ev-card-meta">
+              <span class="ev-card-date">${dateText}</span>
+              ${venue}
+            </div>
+          </div>
+        </a>`;
+    }).join('');
+  }
+
+  // 並び替えボタン
+  document.querySelectorAll('.ev-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.ev-sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentSort = (btn as HTMLElement).dataset.sort || 'date';
+      renderEvents();
+    });
+  });
+
+  // 販売終了フィルター
+  document.getElementById('include-ended')!.addEventListener('change', (e) => {
+    showEnded = (e.target as HTMLInputElement).checked;
+    renderEvents();
+  });
+
+  // 開催終了フィルター
+  document.getElementById('include-past')!.addEventListener('change', (e) => {
+    showPast = (e.target as HTMLInputElement).checked;
+    renderEvents();
+  });
+
+  // 検索
+  let searchTimer: ReturnType<typeof setTimeout>;
+  document.getElementById('search-input')!.addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchQuery = (e.target as HTMLInputElement).value.trim();
+      renderEvents();
+    }, 300);
+  });
+
+  loadEvents();
+</script>
+
 <style>
-  .hero {
-    text-align: center;
-    padding: 3rem 0;
-  }
-
-  .hero h1 {
-    line-height: 1;
-  }
-
-  .hero-logo {
-    height: 64px;
-    width: auto;
-  }
-
-  .subtitle {
-    font-size: 1.2rem;
-    color: var(--color-text-muted);
-    margin-top: 0.5rem;
-  }
-
-  .description {
-    margin-top: 1rem;
-    color: var(--color-text-muted);
-    line-height: 1.8;
-  }
-
-  .cta-group {
-    margin-top: 2rem;
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  .btn {
-    display: inline-block;
-    padding: 0.75rem 2rem;
-    border-radius: var(--radius);
-    font-weight: 600;
-    font-size: 0.95rem;
-    transition: all 0.2s;
-  }
-
-  .btn-primary {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: var(--color-primary-dark);
-    color: white;
-  }
-
-  .btn-secondary {
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--color-primary);
-    color: var(--color-primary);
-  }
-
-  .features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    margin-top: 3rem;
-  }
-
-  .feature-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    box-shadow: var(--shadow);
-  }
-
-  .feature-card h3 {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .feature-card p {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-  }
-
-  /* PWA Install Section */
-  .pwa-install {
-    margin-top: 3rem;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: 2rem;
-    text-align: center;
-    box-shadow: var(--shadow);
-  }
-
-  .pwa-install h2 {
-    font-size: 1.3rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .pwa-description {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .pwa-tabs {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .pwa-tab {
-    padding: 0.5rem 1.5rem;
-    border: 1.5px solid var(--color-border);
-    border-radius: 9999px;
-    background: var(--color-bg);
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .pwa-tab.active {
-    border-color: var(--color-primary);
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .pwa-content {
-    text-align: left;
-    max-width: 400px;
+  /* ===== ページ全体 ===== */
+  .ev-page {
+    max-width: 960px;
     margin: 0 auto;
   }
 
-  .pwa-content.hidden {
-    display: none;
+  /* ===== ヒーロー ===== */
+  .ev-hero {
+    text-align: center;
+    padding: 2rem 0 1.5rem;
   }
-
-  .pwa-steps {
-    list-style: none;
-    counter-reset: step;
-    padding: 0;
+  .ev-hero-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin-bottom: 0.375rem;
   }
-
-  .pwa-steps li {
-    counter-increment: step;
-    padding: 0.6rem 0;
-    padding-left: 2.5rem;
-    position: relative;
+  .ev-hero-sub {
+    color: var(--color-text-muted);
     font-size: 0.9rem;
-    color: var(--color-text);
-    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 1.25rem;
+  }
+  .ev-search-bar {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .ev-search-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--color-border);
+    border-radius: 9999px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+    background: var(--color-surface);
+  }
+  .ev-search-input:focus {
+    border-color: var(--color-primary);
+  }
+  .ev-search-input::placeholder {
+    color: #9ca3af;
   }
 
-  .pwa-steps li:last-child {
-    border-bottom: none;
+  /* ===== コントロール ===== */
+  .ev-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    padding: 0 0.25rem;
   }
-
-  .pwa-steps li::before {
-    content: counter(step);
-    position: absolute;
-    left: 0;
-    top: 0.6rem;
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 50%;
-    background: var(--color-primary);
-    color: white;
+  .ev-sort {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--color-border);
+    border-radius: 9999px;
+    padding: 3px;
+  }
+  .ev-sort-btn {
+    padding: 0.375rem 0.875rem;
+    border: none;
+    border-radius: 9999px;
     font-size: 0.8rem;
-    font-weight: 700;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+  .ev-sort-btn.active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .ev-filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  .ev-filter-check {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 0.375rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .ev-filter-check input {
+    accent-color: var(--color-primary);
+  }
+
+  /* ===== カードグリッド ===== */
+  .ev-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+
+  /* ===== ローディング ===== */
+  .ev-loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+  }
+  .ev-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 0.75rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== 空状態 ===== */
+  .ev-empty {
+    text-align: center;
+    padding: 4rem 1rem;
+    color: var(--color-text-muted);
+  }
+  .ev-empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .hidden { display: none; }
+  .ev-error { color: #dc2626; grid-column: 1 / -1; text-align: center; padding: 2rem; }
+
+  /* ===== レスポンシブ ===== */
+  @media (max-width: 768px) {
+    .ev-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+    .ev-hero-title { font-size: 1.35rem; }
+  }
+  @media (max-width: 480px) {
+    .ev-grid { grid-template-columns: 1fr; gap: 0.75rem; }
+    .ev-controls { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+    .ev-filters { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
   }
 </style>
 
-<script>
-  const tabs = document.querySelectorAll('.pwa-tab');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
+<style is:global>
+  /* ===== イベントカード ===== */
+  .ev-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .ev-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    color: inherit;
+  }
 
-      const target = tab.getAttribute('data-tab');
-      document.querySelectorAll('.pwa-content').forEach(c => c.classList.add('hidden'));
-      document.getElementById(`pwa-${target}`)?.classList.remove('hidden');
-    });
-  });
-</script>
+  /* カード画像 */
+  .ev-card-img-wrap {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: #f3f4f6;
+  }
+  .ev-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .ev-card-img-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #e5e7eb, #d1d5db);
+    color: #9ca3af;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  /* バッジ */
+  .ev-card-badge-wrap {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+  }
+  .ev-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .ev-badge-on {
+    background: #16a34a;
+    color: white;
+  }
+  .ev-badge-before {
+    background: #2563eb;
+    color: white;
+  }
+  .ev-badge-ended {
+    background: rgba(0,0,0,0.55);
+    color: white;
+  }
+  .ev-badge-finished {
+    background: #6b7280;
+    color: white;
+  }
+
+  /* カードボディ */
+  .ev-card-body {
+    padding: 0.75rem 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+  }
+  .ev-card-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .ev-card-performers {
+    font-size: 0.78rem;
+    color: var(--color-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ev-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-top: auto;
+    padding-top: 0.3rem;
+  }
+  .ev-card-date {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+  }
+  .ev-card-venue {
+    font-size: 0.72rem;
+    color: #9ca3af;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>

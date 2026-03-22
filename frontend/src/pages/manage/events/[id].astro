@@ -124,6 +124,24 @@ import Layout from '../../../layouts/Layout.astro';
   let slotIndex = 0;
   let idolGroups: { id: string; name: string; photo_url: string | null }[] = [];
   let groupMembers: { id: string; name: string; group_id: string; group_name: string }[] = [];
+
+  function hourOptions(selected: string = '00'): string {
+    return Array.from({ length: 24 }, (_, i) => {
+      const v = String(i).padStart(2, '0');
+      return `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+    }).join('');
+  }
+  function minuteOptions(selected: string = '00'): string {
+    return [0, 10, 20, 30, 40, 50].map(m => {
+      const v = String(m).padStart(2, '0');
+      return `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+    }).join('');
+  }
+  function getTimeFromSelects(container: Element, prefix: string): string {
+    const h = (container.querySelector(`.${prefix}-hour`) as HTMLSelectElement).value;
+    const m = (container.querySelector(`.${prefix}-minute`) as HTMLSelectElement).value;
+    return `${h}:${m}`;
+  }
   const messageEl = document.getElementById('auth-message') as HTMLDivElement;
   const defaultTicketTypes = ['撮影券', 'チェキ券', 'サイン券'];
 
@@ -206,13 +224,15 @@ import Layout from '../../../layouts/Layout.astro';
     row.className = 'date-row';
     row.dataset.idx = String(idx);
 
-    // ISO → datetime-local 形式に変換
-    const toLocalInput = (iso?: string) => {
-      if (!iso) return '';
+    // ISO → date / hour / minute に分解
+    const parseISO = (iso?: string) => {
+      if (!iso) return { date: '', h: '00', m: '00' };
       const d = new Date(iso);
       const pad = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return { date: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`, h: pad(d.getHours()), m: pad(Math.floor(d.getMinutes() / 10) * 10) };
     };
+    const ss = parseISO(saleStartAt);
+    const se = parseISO(saleEndAt);
 
     row.innerHTML = `
       <div class="date-header">
@@ -226,11 +246,21 @@ import Layout from '../../../layouts/Layout.astro';
       <div class="sale-period-group">
         <div class="form-group">
           <label>販売開始日時</label>
-          <input type="datetime-local" class="sale-start-input" data-idx="${idx}" value="${toLocalInput(saleStartAt)}" />
+          <input type="date" class="sale-start-date" data-idx="${idx}" value="${ss.date}" />
+          <div class="time-select-group">
+            <select class="sale-start-hour" data-idx="${idx}">${hourOptions(ss.h)}</select>
+            <span class="time-colon">:</span>
+            <select class="sale-start-minute" data-idx="${idx}">${minuteOptions(ss.m)}</select>
+          </div>
         </div>
         <div class="form-group">
           <label>販売終了日時</label>
-          <input type="datetime-local" class="sale-end-input" data-idx="${idx}" value="${toLocalInput(saleEndAt)}" />
+          <input type="date" class="sale-end-date" data-idx="${idx}" value="${se.date}" />
+          <div class="time-select-group">
+            <select class="sale-end-hour" data-idx="${idx}">${hourOptions(se.h)}</select>
+            <span class="time-colon">:</span>
+            <select class="sale-end-minute" data-idx="${idx}">${minuteOptions(se.m)}</select>
+          </div>
         </div>
       </div>
       <div class="slots-container" data-idx="${idx}"></div>
@@ -251,16 +281,28 @@ import Layout from '../../../layouts/Layout.astro';
     const slotDiv = document.createElement('div');
     slotDiv.className = 'slot-row';
     slotDiv.dataset.slotIdx = String(sid);
+    const stH = startTime ? startTime.split(':')[0] : '00';
+    const stM = startTime ? startTime.split(':')[1] : '00';
+    const dtH = doorTime ? doorTime.split(':')[0] : '00';
+    const dtM = doorTime ? doorTime.split(':')[1] : '00';
     slotDiv.innerHTML = `
       <div class="slot-top">
         <div class="slot-fields">
           <div class="form-group">
-            <label>開始時間 <span class="required">*</span></label>
-            <input type="time" class="start-time" required step="300" value="${startTime || ''}" />
+            <label>開演 <span class="required">*</span></label>
+            <div class="time-select-group">
+              <select class="start-hour">${hourOptions(stH)}</select>
+              <span class="time-colon">:</span>
+              <select class="start-minute">${minuteOptions(stM)}</select>
+            </div>
           </div>
           <div class="form-group">
-            <label>開場時間</label>
-            <input type="time" class="door-time" step="300" value="${doorTime || ''}" />
+            <label>開場</label>
+            <div class="time-select-group">
+              <select class="door-hour">${hourOptions(dtH)}</select>
+              <span class="time-colon">:</span>
+              <select class="door-minute">${minuteOptions(dtM)}</select>
+            </div>
           </div>
         </div>
         <button type="button" class="btn-remove-slot">&times;</button>
@@ -283,16 +325,20 @@ import Layout from '../../../layouts/Layout.astro';
       existingMembers.forEach(m => addMemberRow(sid, m.display_name, m.products));
     }
 
-    const startInput = slotDiv.querySelector('.start-time') as HTMLInputElement;
-    const doorInput = slotDiv.querySelector('.door-time') as HTMLInputElement;
-    startInput.addEventListener('change', () => {
-      if (startInput.value && !doorInput.value) {
-        const [h, m] = startInput.value.split(':').map(Number);
-        const totalMin = h * 60 + m - 30;
+    const startHourSel = slotDiv.querySelector('.start-hour') as HTMLSelectElement;
+    const startMinSel = slotDiv.querySelector('.start-minute') as HTMLSelectElement;
+    const doorHourSel = slotDiv.querySelector('.door-hour') as HTMLSelectElement;
+    const doorMinSel = slotDiv.querySelector('.door-minute') as HTMLSelectElement;
+    let doorTouched = !!doorTime;
+    [doorHourSel, doorMinSel].forEach(el => el.addEventListener('change', () => { doorTouched = true; }));
+    [startHourSel, startMinSel].forEach(el => el.addEventListener('change', () => {
+      if (!doorTouched) {
+        const totalMin = Number(startHourSel.value) * 60 + Number(startMinSel.value) - 30;
         const adjMin = totalMin < 0 ? totalMin + 24 * 60 : totalMin;
-        doorInput.value = `${String(Math.floor(adjMin / 60)).padStart(2, '0')}:${String(adjMin % 60).padStart(2, '0')}`;
+        doorHourSel.value = String(Math.floor(adjMin / 60)).padStart(2, '0');
+        doorMinSel.value = String(Math.floor((adjMin % 60) / 10) * 10).padStart(2, '0');
       }
-    });
+    }));
   }
 
   function addMemberRow(slotIdx: number, memberName?: string, products?: { ticket_type: string; price: number; stock_limit: number | null }[]) {
@@ -455,16 +501,19 @@ import Layout from '../../../layouts/Layout.astro';
       const dateInput = row.querySelector('.date-input') as HTMLInputElement;
       if (!dateInput.value) { showMessage('開催日を入力してください。', true); return; }
 
-      const saleStartInput = row.querySelector('.sale-start-input') as HTMLInputElement;
-      const saleEndInput = row.querySelector('.sale-end-input') as HTMLInputElement;
-      const saleStartAt = saleStartInput?.value ? new Date(saleStartInput.value).toISOString() : null;
-      const saleEndAt = saleEndInput?.value ? new Date(saleEndInput.value).toISOString() : null;
+      const saleStartDate = (row.querySelector('.sale-start-date') as HTMLInputElement)?.value;
+      const saleStartH = (row.querySelector('.sale-start-hour') as HTMLSelectElement)?.value || '00';
+      const saleStartM = (row.querySelector('.sale-start-minute') as HTMLSelectElement)?.value || '00';
+      const saleStartAt = saleStartDate ? new Date(`${saleStartDate}T${saleStartH}:${saleStartM}`).toISOString() : null;
+      const saleEndDate = (row.querySelector('.sale-end-date') as HTMLInputElement)?.value;
+      const saleEndH = (row.querySelector('.sale-end-hour') as HTMLSelectElement)?.value || '00';
+      const saleEndM = (row.querySelector('.sale-end-minute') as HTMLSelectElement)?.value || '00';
+      const saleEndAt = saleEndDate ? new Date(`${saleEndDate}T${saleEndH}:${saleEndM}`).toISOString() : null;
 
       const slotsColl: SlotCollected[] = [];
       for (const slotRow of row.querySelectorAll('.slot-row')) {
-        const startTime = (slotRow.querySelector('.start-time') as HTMLInputElement).value;
-        const doorTime = (slotRow.querySelector('.door-time') as HTMLInputElement).value;
-        if (!startTime) { showMessage('開始時間を入力してください。', true); return; }
+        const startTime = getTimeFromSelects(slotRow, 'start');
+        const doorTime = getTimeFromSelects(slotRow, 'door');
 
         const members: MemberData[] = [];
         for (const card of slotRow.querySelectorAll('.member-card')) {
@@ -497,7 +546,13 @@ import Layout from '../../../layouts/Layout.astro';
       const imageFile = (document.getElementById('event-image') as HTMLInputElement).files?.[0];
       if (imageFile) {
         const path = `events/${currentUser.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
-        imageUrl = (await uploadImage(imageFile, path)) || undefined;
+        const uploaded = await uploadImage(imageFile, path);
+        if (!uploaded) {
+          showMessage('画像のアップロードに失敗しました。Storageバケットの設定を確認してください。', true);
+          submitBtn.disabled = false;
+          return;
+        }
+        imageUrl = uploaded;
       }
 
       const selectedNames = idolGroups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name);
@@ -766,6 +821,15 @@ import Layout from '../../../layouts/Layout.astro';
   .btn-map:hover { background: #059669; color: white; }
   .checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
   .price-row { flex-direction: row; }
+
+  .time-select-group { display: flex; align-items: center; gap: 0.25rem; }
+  .time-select-group select {
+    padding: 0.5rem 0.5rem; border: 1px solid var(--color-border);
+    border-radius: var(--radius); font-size: 0.9rem; font-family: inherit;
+    outline: none; background: white; cursor: pointer;
+  }
+  .time-select-group select:focus { border-color: var(--color-primary); }
+  .time-colon { font-weight: 700; font-size: 1rem; color: var(--color-text-muted); }
 
   .sale-period-group { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
   .sale-period-group .form-group { flex: 1; margin-bottom: 0; }

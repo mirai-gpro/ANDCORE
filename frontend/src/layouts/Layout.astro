@@ -25,8 +25,8 @@ const { title } = Astro.props;
       <nav class="nav">
         <a href="/" class="logo"><img src="/images/andcore_logo.png" alt="アンコール" class="logo-img" /></a>
         <div id="nav-links" class="nav-links">
-          <a href="/events">イベント</a>
-          <a href="/for-organizers" class="nav-biz">運営者様ページ</a>
+          <a href="/">イベント</a>
+          <a href="/sell" class="nav-biz">チケットを販売する</a>
           <div id="nav-role-switcher" class="nav-role-switcher" style="display:none;">
             <button id="nav-role-btn" class="nav-role-btn">
               <span id="nav-role-label" class="nav-role-label"></span>
@@ -70,16 +70,21 @@ const { title } = Astro.props;
         const user = session?.user;
 
         if (user) {
-          const activeRole = getActiveRole(user);
           const userRoles = await getUserRoles(user.id);
 
-          // localStorage が未設定の場合、profiles.role から同期
+          // ロール優先順位（高い方を初期値にする）
+          const ROLE_PRIORITY = ['admin', 'organizer', 'idol', 'fan'];
+          const highestRole = ROLE_PRIORITY.find(r => userRoles.includes(r)) || 'fan';
+
+          // localStorage が未設定の場合、最上位ロールを初期値にする
           if (!localStorage.getItem('active_role')) {
-            localStorage.setItem('active_role', activeRole);
+            localStorage.setItem('active_role', highestRole);
           }
 
+          const activeRole = getActiveRole(user);
+
           // activeRole が userRoles に含まれない場合（ロール剥奪された場合など）
-          const validRole = userRoles.includes(activeRole) ? activeRole : userRoles[0] || 'fan';
+          const validRole = userRoles.includes(activeRole) ? activeRole : highestRole;
           if (validRole !== activeRole) {
             localStorage.setItem('active_role', validRole);
           }
