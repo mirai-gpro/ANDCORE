@@ -19,10 +19,16 @@ import Layout from '../../layouts/Layout.astro';
         <button class="ev-sort-btn active" data-sort="date">開催日順</button>
         <button class="ev-sort-btn" data-sort="new">新着順</button>
       </div>
-      <label class="ev-filter-check">
-        <input type="checkbox" id="include-ended" />
-        販売終了も表示
-      </label>
+      <div class="ev-filters">
+        <label class="ev-filter-check">
+          <input type="checkbox" id="include-ended" />
+          販売終了も表示
+        </label>
+        <label class="ev-filter-check">
+          <input type="checkbox" id="include-past" />
+          開催終了も表示
+        </label>
+      </div>
     </section>
 
     <!-- イベントグリッド -->
@@ -46,6 +52,7 @@ import Layout from '../../layouts/Layout.astro';
   let allEvents: any[] = [];
   let currentSort = 'date';
   let showEnded = false;
+  let showPast = false;
   let searchQuery = '';
 
   async function loadEvents() {
@@ -95,6 +102,10 @@ import Layout from '../../layouts/Layout.astro';
         else saleStatus = 'ended';
       }
 
+      // 開催終了判定: 全日程が過去
+      const lastDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null;
+      const eventFinished = lastDate ? new Date(lastDate + 'T23:59:59') < now : false;
+
       return {
         ...event,
         firstDate: sortedDates[0] || null,
@@ -102,6 +113,7 @@ import Layout from '../../layouts/Layout.astro';
         saleStatus,
         earliestSaleStart,
         latestSaleEnd,
+        eventFinished,
       };
     });
 
@@ -127,6 +139,11 @@ import Layout from '../../layouts/Layout.astro';
     // 販売終了フィルター
     if (!showEnded) {
       filtered = filtered.filter(e => e.saleStatus !== 'ended');
+    }
+
+    // 開催終了フィルター
+    if (!showPast) {
+      filtered = filtered.filter(e => !e.eventFinished);
     }
 
     // ソート
@@ -157,7 +174,9 @@ import Layout from '../../layouts/Layout.astro';
         : '日程未定';
 
       let badgeHtml = '';
-      if (event.saleStatus === 'on_sale') {
+      if (event.eventFinished) {
+        badgeHtml = '<span class="ev-badge ev-badge-finished">開催終了</span>';
+      } else if (event.saleStatus === 'on_sale') {
         badgeHtml = '<span class="ev-badge ev-badge-on">販売中</span>';
       } else if (event.saleStatus === 'before') {
         badgeHtml = '<span class="ev-badge ev-badge-before">販売前</span>';
@@ -208,6 +227,12 @@ import Layout from '../../layouts/Layout.astro';
   // 販売終了フィルター
   document.getElementById('include-ended')!.addEventListener('change', (e) => {
     showEnded = (e.target as HTMLInputElement).checked;
+    renderEvents();
+  });
+
+  // 開催終了フィルター
+  document.getElementById('include-past')!.addEventListener('change', (e) => {
+    showPast = (e.target as HTMLInputElement).checked;
     renderEvents();
   });
 
@@ -300,6 +325,11 @@ import Layout from '../../layouts/Layout.astro';
     color: var(--color-text);
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
+  .ev-filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
   .ev-filter-check {
     display: flex;
     align-items: center;
@@ -359,6 +389,7 @@ import Layout from '../../layouts/Layout.astro';
   @media (max-width: 480px) {
     .ev-grid { grid-template-columns: 1fr; gap: 0.75rem; }
     .ev-controls { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+    .ev-filters { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
   }
 </style>
 
@@ -429,6 +460,10 @@ import Layout from '../../layouts/Layout.astro';
   }
   .ev-badge-ended {
     background: rgba(0,0,0,0.55);
+    color: white;
+  }
+  .ev-badge-finished {
+    background: #6b7280;
     color: white;
   }
 
