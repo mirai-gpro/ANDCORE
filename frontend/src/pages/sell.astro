@@ -1,0 +1,684 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="チケットを販売する">
+  <div class="sell-page">
+
+    <!-- ヒーロー -->
+    <section class="sell-hero">
+      <p class="sell-hero-label">特典会DXサービス</p>
+      <h1 class="sell-hero-title">ファンが増える<br />次世代プレイガイド</h1>
+      <p class="sell-hero-sub">
+        デジタルチケット・撮影管理・ファン分析を<br />
+        ワンストップで。特典会運営をもっとスマートに。
+      </p>
+      <div class="sell-hero-stats">
+        <div class="sell-stat">
+          <span class="sell-stat-num">300+</span>
+          <span class="sell-stat-label">イベント</span>
+        </div>
+        <div class="sell-stat">
+          <span class="sell-stat-num">10,000+</span>
+          <span class="sell-stat-label">利用ユーザー</span>
+        </div>
+        <div class="sell-stat">
+          <span class="sell-stat-num">100+</span>
+          <span class="sell-stat-label">主催者</span>
+        </div>
+      </div>
+      <div class="sell-hero-cta">
+        <a href="/for-organizers/register" class="sell-btn sell-btn-primary">無料ではじめる</a>
+        <a href="#features" class="sell-btn sell-btn-ghost">詳しく見る</a>
+      </div>
+    </section>
+
+    <!-- 選ばれる理由 -->
+    <section class="sell-section" id="features">
+      <h2 class="sell-section-title">アンコールが選ばれる理由</h2>
+      <div class="sell-reasons">
+        <div class="sell-reason-card">
+          <div class="sell-reason-num">01</div>
+          <h3>最短5分で<br />チケット販売開始</h3>
+          <p>イベントを作成してチケットを設定するだけ。面倒な手続きは不要。すぐに販売をスタートできます。</p>
+        </div>
+        <div class="sell-reason-card">
+          <div class="sell-reason-num">02</div>
+          <h3>チケット・撮影・<br />ファン管理を統合</h3>
+          <p>チケット販売だけでなく、特典会の撮影管理やファンのエンゲージメント分析まで一元管理。</p>
+        </div>
+        <div class="sell-reason-card">
+          <div class="sell-reason-num">03</div>
+          <h3>主催者負担0円<br />ではじめられる</h3>
+          <p>月額利用料は無料。手数料はファン負担を選べるので、主催者様の負担なくスタートできます。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- プロ仕様機能 -->
+    <section class="sell-section">
+      <h2 class="sell-section-title">プロ仕様の機能</h2>
+      <p class="sell-section-sub">特典会運営に必要な機能をすべて揃えました</p>
+      <div class="sell-features">
+        <div class="sell-feature">
+          <div class="sell-feature-icon">🎫</div>
+          <h4>デジタルチケット</h4>
+          <p>QRコードで入場。紙チケット不要でスムーズな運営を実現。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">📸</div>
+          <h4>撮影管理</h4>
+          <p>ブラウザ撮影・自動保存。特典会の撮影をデジタルで効率化。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">📊</div>
+          <h4>ファン分析</h4>
+          <p>推し活ランキング・来場履歴でファンのエンゲージメントを可視化。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">🎰</div>
+          <h4>抽選販売</h4>
+          <p>人気イベントに最適。公平な抽選でファンの信頼を獲得。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">💬</div>
+          <h4>一括メッセージ配信</h4>
+          <p>チケット購入者へのお知らせを一括送信。告知の手間を削減。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">🔄</div>
+          <h4>簡単払い戻し</h4>
+          <p>ワンクリックで払い戻し処理。急なイベント変更にも対応。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">💺</div>
+          <h4>タイムスロット管理</h4>
+          <p>複数時間帯・複数メンバーのスロットを柔軟に設定。</p>
+        </div>
+        <div class="sell-feature">
+          <div class="sell-feature-icon">📱</div>
+          <h4>PWA対応</h4>
+          <p>アプリインストール不要。ブラウザからアプリのように使える。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 料金 -->
+    <section class="sell-section sell-pricing-section" id="pricing">
+      <h2 class="sell-section-title">料金プラン</h2>
+      <p class="sell-section-sub">シンプルで分かりやすい料金体系</p>
+      <div class="sell-pricing">
+        <div class="sell-price-card sell-price-main">
+          <div class="sell-price-badge">基本プラン</div>
+          <div class="sell-price-amount">
+            <span class="sell-price-yen">¥</span>
+            <span class="sell-price-num">0</span>
+            <span class="sell-price-unit">/月</span>
+          </div>
+          <p class="sell-price-desc">月額利用料は無料。<br />基本機能すべてお使いいただけます。</p>
+          <ul class="sell-price-list">
+            <li>イベント作成・管理</li>
+            <li>チケット販売</li>
+            <li>QRコード入場</li>
+            <li>ファン分析ダッシュボード</li>
+            <li>撮影管理</li>
+            <li>メッセージ配信</li>
+          </ul>
+          <a href="/for-organizers/register" class="sell-btn sell-btn-primary sell-btn-block">無料ではじめる</a>
+        </div>
+        <div class="sell-price-card">
+          <h4 class="sell-price-fee-title">手数料</h4>
+          <table class="sell-price-table">
+            <tbody>
+              <tr>
+                <td>チケット販売手数料</td>
+                <td><strong>5.5%</strong><br /><span class="sell-price-note">購入者負担を選択可</span></td>
+              </tr>
+              <tr>
+                <td>システム利用料</td>
+                <td><strong>220円</strong> / 枚</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="sell-price-hint">※ 購入者負担を選択した場合、主催者様の実質負担は0円です。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 利用ステップ -->
+    <section class="sell-section">
+      <h2 class="sell-section-title">かんたん3ステップ</h2>
+      <div class="sell-steps">
+        <div class="sell-step">
+          <div class="sell-step-num">1</div>
+          <h4>アカウント作成</h4>
+          <p>メールアドレスまたはGoogleアカウントで無料登録。最短30秒で完了。</p>
+        </div>
+        <div class="sell-step-arrow">→</div>
+        <div class="sell-step">
+          <div class="sell-step-num">2</div>
+          <h4>イベントを作成</h4>
+          <p>イベント情報・日程・チケット種類を入力。テンプレートですぐに設定。</p>
+        </div>
+        <div class="sell-step-arrow">→</div>
+        <div class="sell-step">
+          <div class="sell-step-num">3</div>
+          <h4>販売開始</h4>
+          <p>URLをSNSで共有するだけ。ファンはスマホから簡単に購入できます。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="sell-section" id="faq">
+      <h2 class="sell-section-title">よくある質問</h2>
+      <div class="sell-faq">
+        <details class="sell-faq-item">
+          <summary>初期費用や月額費用はかかりますか？</summary>
+          <p>いいえ、初期費用・月額費用ともに無料です。チケットが売れた時のみ手数料が発生します。</p>
+        </details>
+        <details class="sell-faq-item">
+          <summary>どのような決済方法に対応していますか？</summary>
+          <p>クレジットカード決済に対応しています。GMOペイメントゲートウェイを利用した安全な決済環境を提供しています。</p>
+        </details>
+        <details class="sell-faq-item">
+          <summary>イベントページの作成に時間はかかりますか？</summary>
+          <p>最短5分で作成可能です。イベント名・日程・チケット種類を入力するだけで販売ページが自動生成されます。</p>
+        </details>
+        <details class="sell-faq-item">
+          <summary>チケットの払い戻しはできますか？</summary>
+          <p>はい、管理画面からワンクリックで払い戻し処理が可能です。イベント中止の際も迅速に対応できます。</p>
+        </details>
+        <details class="sell-faq-item">
+          <summary>売上金はいつ受け取れますか？</summary>
+          <p>イベント終了後、指定の銀行口座にお振込みいたします。</p>
+        </details>
+        <details class="sell-faq-item">
+          <summary>複数メンバーの特典会に対応していますか？</summary>
+          <p>はい、タイムスロットごとに出演メンバーを設定でき、複数メンバーの特典会をスムーズに管理できます。</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="sell-cta-section">
+      <h2>さあ、はじめましょう</h2>
+      <p>アンコールで特典会の運営をもっと簡単に、もっとスマートに。</p>
+      <div class="sell-cta-btns">
+        <a href="/for-organizers/register" class="sell-btn sell-btn-primary sell-btn-lg">無料ではじめる</a>
+        <a href="/for-organizers" class="sell-btn sell-btn-outline">ログイン・登録ページへ</a>
+      </div>
+    </section>
+
+  </div>
+</Layout>
+
+<style>
+  .sell-page {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  /* ===== ヒーロー ===== */
+  .sell-hero {
+    text-align: center;
+    padding: 3rem 0 2.5rem;
+  }
+  .sell-hero-label {
+    display: inline-block;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.3rem 1rem;
+    border-radius: 9999px;
+    letter-spacing: 0.05em;
+    margin-bottom: 1.25rem;
+  }
+  .sell-hero-title {
+    font-size: 2.25rem;
+    font-weight: 900;
+    line-height: 1.3;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #1a1a2e, #6366f1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .sell-hero-sub {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+    line-height: 1.8;
+    margin-bottom: 2rem;
+  }
+  .sell-hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 2.5rem;
+    margin-bottom: 2rem;
+  }
+  .sell-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .sell-stat-num {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--color-primary);
+  }
+  .sell-stat-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.2rem;
+  }
+  .sell-hero-cta {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ===== ボタン ===== */
+  .sell-btn {
+    display: inline-block;
+    padding: 0.75rem 1.75rem;
+    border-radius: 9999px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+  }
+  .sell-btn-primary {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  }
+  .sell-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    color: white;
+  }
+  .sell-btn-ghost {
+    background: none;
+    color: var(--color-text-muted);
+    border: 1.5px solid var(--color-border);
+  }
+  .sell-btn-ghost:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+  .sell-btn-outline {
+    background: none;
+    color: var(--color-primary);
+    border: 1.5px solid var(--color-primary);
+  }
+  .sell-btn-outline:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+  .sell-btn-block {
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+  .sell-btn-lg {
+    padding: 1rem 2.5rem;
+    font-size: 1rem;
+  }
+
+  /* ===== セクション共通 ===== */
+  .sell-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--color-border);
+  }
+  .sell-section-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+  }
+  .sell-section-sub {
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  /* ===== 選ばれる理由 ===== */
+  .sell-reasons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+  .sell-reason-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .sell-reason-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+  .sell-reason-num {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.1em;
+  }
+  .sell-reason-card h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+  }
+  .sell-reason-card p {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+  }
+
+  /* ===== 機能グリッド ===== */
+  .sell-features {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    margin-top: 2rem;
+  }
+  .sell-feature {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .sell-feature:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  }
+  .sell-feature-icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .sell-feature h4 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .sell-feature p {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+
+  /* ===== 料金 ===== */
+  .sell-pricing-section {
+    background: linear-gradient(180deg, #f8f7ff 0%, var(--color-bg) 100%);
+    border-radius: 16px;
+    padding: 3rem 1.5rem;
+    border: none;
+  }
+  .sell-pricing {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .sell-price-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 2rem 1.5rem;
+  }
+  .sell-price-main {
+    border-color: var(--color-primary);
+    border-width: 2px;
+    position: relative;
+  }
+  .sell-price-badge {
+    display: inline-block;
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    margin-bottom: 1rem;
+  }
+  .sell-price-amount {
+    display: flex;
+    align-items: baseline;
+    gap: 0.125rem;
+    margin-bottom: 0.75rem;
+  }
+  .sell-price-yen {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+  .sell-price-num {
+    font-size: 3rem;
+    font-weight: 900;
+    color: var(--color-text);
+    line-height: 1;
+  }
+  .sell-price-unit {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-left: 0.25rem;
+  }
+  .sell-price-desc {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
+  }
+  .sell-price-list {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+  }
+  .sell-price-list li {
+    padding: 0.4rem 0;
+    font-size: 0.82rem;
+    color: var(--color-text);
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .sell-price-list li::before {
+    content: '✓ ';
+    color: #16a34a;
+    font-weight: 700;
+  }
+  .sell-price-fee-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+  }
+  .sell-price-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  .sell-price-table td {
+    padding: 0.75rem 0;
+    font-size: 0.82rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+  }
+  .sell-price-table td:first-child {
+    color: var(--color-text-muted);
+    width: 50%;
+  }
+  .sell-price-note {
+    font-size: 0.72rem;
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+  .sell-price-hint {
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    margin-top: 0.5rem;
+  }
+
+  /* ===== ステップ ===== */
+  .sell-steps {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+  .sell-step {
+    flex: 1;
+    max-width: 240px;
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 2rem 1.25rem;
+  }
+  .sell-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+  }
+  .sell-step h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .sell-step p {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+  }
+  .sell-step-arrow {
+    font-size: 1.25rem;
+    color: var(--color-text-muted);
+    margin-top: 3rem;
+    flex-shrink: 0;
+  }
+
+  /* ===== FAQ ===== */
+  .sell-faq {
+    max-width: 680px;
+    margin: 1.5rem auto 0;
+  }
+  .sell-faq-item {
+    border-bottom: 1px solid var(--color-border);
+  }
+  .sell-faq-item summary {
+    padding: 1rem 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sell-faq-item summary::after {
+    content: '+';
+    font-size: 1.25rem;
+    color: var(--color-text-muted);
+    font-weight: 400;
+    flex-shrink: 0;
+    margin-left: 1rem;
+  }
+  .sell-faq-item[open] summary::after {
+    content: '−';
+  }
+  .sell-faq-item summary::-webkit-details-marker {
+    display: none;
+  }
+  .sell-faq-item p {
+    padding: 0 0 1rem;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    line-height: 1.7;
+  }
+
+  /* ===== CTA ===== */
+  .sell-cta-section {
+    text-align: center;
+    padding: 3.5rem 0 2rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .sell-cta-section h2 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+  }
+  .sell-cta-section p {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+  .sell-cta-btns {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ===== レスポンシブ ===== */
+  @media (max-width: 768px) {
+    .sell-hero-title {
+      font-size: 1.6rem;
+    }
+    .sell-hero-stats {
+      gap: 1.5rem;
+    }
+    .sell-reasons {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    .sell-features {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+    .sell-pricing {
+      grid-template-columns: 1fr;
+    }
+    .sell-steps {
+      flex-direction: column;
+      align-items: center;
+    }
+    .sell-step {
+      max-width: 100%;
+      width: 100%;
+    }
+    .sell-step-arrow {
+      transform: rotate(90deg);
+      margin: 0;
+    }
+  }
+  @media (max-width: 480px) {
+    .sell-features {
+      grid-template-columns: 1fr;
+    }
+    .sell-hero-stats {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+  }
+</style>
