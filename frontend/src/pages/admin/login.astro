@@ -50,6 +50,8 @@ import Layout from '../../layouts/Layout.astro';
     messageEl.className = `message ${isError ? 'message-error' : 'message-success'}`;
   }
 
+  const ADMIN_EMAILS = ['unfix.hamada@gmail.com'];
+
   async function checkAdminAndRedirect(user: any) {
     // user_roles テーブルで admin 権限を確認
     const { data: roles } = await supabase
@@ -58,7 +60,10 @@ import Layout from '../../layouts/Layout.astro';
       .eq('user_id', user.id)
       .eq('role', 'admin');
 
-    if (!roles || roles.length === 0) {
+    const isAdminByRole = roles && roles.length > 0;
+    const isAdminByEmail = user.email && ADMIN_EMAILS.includes(user.email);
+
+    if (!isAdminByRole && !isAdminByEmail) {
       showMessage('管理者権限がありません。管理者に連絡してください。', true);
       await supabase.auth.signOut();
       return;
@@ -137,7 +142,8 @@ import Layout from '../../layouts/Layout.astro';
         .select('role')
         .eq('user_id', user.id)
         .eq('role', 'admin');
-      if (roles && roles.length > 0) {
+      const isAdmin = (roles && roles.length > 0) || (user.email && ADMIN_EMAILS.includes(user.email));
+      if (isAdmin) {
         localStorage.setItem('active_role', 'admin');
         window.location.href = '/admin';
       }
