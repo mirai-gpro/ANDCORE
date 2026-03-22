@@ -53,29 +53,21 @@ export function getActiveRole(user: { user_metadata?: Record<string, any> }): st
  * user_metadata.role は登録時の種別権限（最も信頼できるソース）
  */
 export async function getUserRoles(userId: string): Promise<string[]> {
+  const roles = new Set<string>();
+
+  // 1. user_roles テーブルから取得
   const { data, error } = await supabase
     .from('user_roles')
     .select('role')
     .eq('user_id', userId);
 
-  // user_roles テーブルが正常に動作している場合
   if (!error && data && data.length > 0) {
-    return data.map(r => r.role);
-  }
-
-  // フォールバック: user_metadata.role と profiles.role の両方を確認
-  // profiles.role は switchRole で変わるが、user_metadata.role は登録時の種別を保持
-  const roles = new Set<string>();
-
-  // user_metadata.role から展開（登録時の種別権限）
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user?.user_metadata?.role) {
-    for (const r of expandRoles(user.user_metadata.role)) {
-      roles.add(r);
+    for (const r of data) {
+      roles.add(r.role);
     }
   }
 
-  // profiles.role からも展開（現在のアクティブロール）
+  // 2. profiles.role からも展開してマージ（user_roles にロールが欠けている場合の補完）
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -83,6 +75,14 @@ export async function getUserRoles(userId: string): Promise<string[]> {
     .single();
   if (profile?.role) {
     for (const r of expandRoles(profile.role)) {
+      roles.add(r);
+    }
+  }
+
+  // 3. user_metadata.role からも展開してマージ（登録時の種別権限）
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.user_metadata?.role) {
+    for (const r of expandRoles(user.user_metadata.role)) {
       roles.add(r);
     }
   }
