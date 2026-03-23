@@ -68,7 +68,7 @@ export default function TicketPurchase({ eventId }: Props) {
   const [holdId, setHoldId] = useState('');
   const [holdExpires, setHoldExpires] = useState('');
   const [totalAmount, setTotalAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('gmo');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('points');
   const [pointsBalance, setPointsBalance] = useState(0);
 
   const [loading, setLoading] = useState(true);
@@ -367,18 +367,6 @@ export default function TicketPurchase({ eventId }: Props) {
 
         <div className="payment-method-section">
           <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>決済方法</h3>
-          <label className={`payment-option ${paymentMethod === 'gmo' ? 'active' : ''}`}>
-            <input
-              type="radio"
-              name="payment"
-              checked={paymentMethod === 'gmo'}
-              onChange={() => setPaymentMethod('gmo')}
-            />
-            <div className="payment-option-content">
-              <span className="payment-option-title">クレジットカード決済</span>
-              <span className="payment-option-desc">決済画面に遷移します</span>
-            </div>
-          </label>
           <label className={`payment-option ${paymentMethod === 'points' ? 'active' : ''}`}>
             <input
               type="radio"
@@ -392,6 +380,18 @@ export default function TicketPurchase({ eventId }: Props) {
                 残高: {pointsBalance.toLocaleString()}pt
                 {pointsBalance < cartTotal && <span style={{ color: '#dc2626', marginLeft: '0.5rem' }}>（残高不足）</span>}
               </span>
+            </div>
+          </label>
+          <label className={`payment-option ${paymentMethod === 'gmo' ? 'active' : ''}`}>
+            <input
+              type="radio"
+              name="payment"
+              checked={paymentMethod === 'gmo'}
+              onChange={() => setPaymentMethod('gmo')}
+            />
+            <div className="payment-option-content">
+              <span className="payment-option-title">クレジットカード決済</span>
+              <span className="payment-option-desc">決済画面に遷移します</span>
             </div>
           </label>
         </div>
